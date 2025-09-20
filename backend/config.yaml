@@ -1,0 +1,10 @@
+llm:
+  provider: openai
+  model: qwen2.5:7b
+  base_url: http://127.0.0.1:11434/v1
+  api_key: dummy
+  timeout: 60
+retrieval:
+  enable_heuristic: true
+  enable_embedding: false
+  limit: 6

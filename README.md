@@ -61,7 +61,7 @@ uvicorn backend.app:create_app --factory --host 0.0.0.0 --port 8000
   - 支持 `export BIDDING_ASSISTANT_CONFIG=/path/to/app.yaml`
   - 默认读取 `backend/config.yaml` 或 `config/app.yaml`
 
-示例 `config/app.yaml`：
+示例 `config/app.yaml`（仓库已提供 `backend/config.yaml` 可直接使用或复制）：
 
 ```yaml
 llm:
@@ -73,6 +73,20 @@ retrieval:
   embedding_model: shibing624/text2vec-base-chinese
   limit: 6
 ```
+
+### 本地 Ollama 模型接入
+
+1. 启动 Ollama 服务：`ollama serve`
+2. 拉取模型（建议至少安装一个 7B 量化版本，MacBook Pro M4 + 24GB 内存可流畅运行）：
+   ```bash
+   ollama pull qwen2.5:7b
+   ollama pull deepseek-r1:7b
+   ```
+   如需更快响应，可使用 `:7b-q4_0` 量化模型。
+3. 后端配置：`backend/config.yaml` 默认指向 `qwen2.5:7b`，若要切换到 DeepSeek，将 `model` 改为 `deepseek-r1:7b` 即可。
+4. 启动 API：`uvicorn backend.app:create_app --factory --host 0.0.0.0 --port 8000`
+5. 验证接口：`curl http://127.0.0.1:8000/config` 查看当前配置，再通过前端或 CLI 调用 `/analyze/text`。
+
 
 ## 小程序前端
 
