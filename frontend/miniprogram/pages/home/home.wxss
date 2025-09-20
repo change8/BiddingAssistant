@@ -1,0 +1,47 @@
+.card {
+  background: #fff;
+  margin: 24rpx;
+  padding: 24rpx;
+  border-radius: 16rpx;
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.04);
+}
+
+.title {
+  font-size: 32rpx;
+  font-weight: 600;
+}
+
+.btn {
+  background: #1677ff;
+  color: #fff;
+  border: none;
+}
+
+.status-bar {
+  margin: 24rpx;
+  padding: 16rpx;
+  border-radius: 12rpx;
+  background: rgba(22, 119, 255, 0.08);
+  color: #1677ff;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.job-id {
+  font-size: 24rpx;
+  color: #666;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 12rpx;
+  color: #555;
+}
+
+.summary-count {
+  color: #1677ff;
+  font-weight: 600;
+}
+

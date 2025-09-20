@@ -1,0 +1,88 @@
+version: 0.1
+rules:
+  # 关键/核心条款
+  - id: core_qualification
+    category: 关键/核心条款
+    description: 供应商资质要求（资质证书、等级、近三年案例等）
+    match_type: keyword
+    patterns: ["供应商资质", "资质要求", "资格条件", "投标人须知", "合格投标人"]
+    severity: high
+    advice: 核对本公司资质是否满足；不足部分尽快补强或判断出局风险。
+
+  - id: core_tech_spec
+    category: 关键/核心条款
+    description: 核心技术参数/必达指标
+    match_type: keyword
+    patterns: ["必达参数", "技术指标", "性能要求", "最低配置"]
+    severity: high
+    advice: 梳理与我方方案差距，确认偏差与替代可行性。
+
+  - id: core_delivery_time
+    category: 关键/核心条款
+    description: 交付周期/进度计划/里程碑
+    match_type: regex
+    patterns: ["(交付周期|进度计划|里程碑|工期).{0,12}(日|天|周|月)"]
+    severity: high
+    advice: 评估交付能力与资源准备，必要时提出澄清或条件。
+
+  # 疑问/需澄清
+  - id: clarify_ambiguity
+    category: 疑问/需澄清
+    description: 模糊、矛盾或缺失信息（如未指定数量/型号/范围）
+    match_type: regex
+    patterns: ["(未明确|不明确|待定|按需|由中标人自行|自行承担)", "(详见|参考)但未给出附件"]
+    severity: medium
+    advice: 汇总澄清问题清单，在答疑前提交；避免投标偏差。
+
+  # 不利条款
+  - id: unfavorable_payment
+    category: 不利条款
+    description: 付款条件不利（尾款比例高、质保金比例高、验收触发严苛）
+    match_type: regex
+    patterns: ["(质保金|保留金).{0,10}(5%|8%|10%|以上)", "(尾款|余款).{0,10}(30%|40%|50%)"]
+    severity: high
+    advice: 评估现金流压力，争取里程碑分期或降低质保金比例。
+
+  - id: unfavorable_penalty
+    category: 不利条款
+    description: 违约/罚则不对等或比例过高
+    match_type: regex
+    patterns: ["(违约金|罚金|罚款).{0,10}(千分|百分|每日)"]
+    severity: medium
+    advice: 评估法律风险并尝试协商对等或上限封顶。
+
+  # 拦标项
+  - id: block_single_brand
+    category: 拦标项
+    description: 指定唯一品牌/型号或与特定供应商强相关特征
+    match_type: keyword
+    patterns: ["唯一品牌", "指定品牌", "仅限", "原厂授权唯一", "不接受等效"]
+    severity: critical
+    advice: 识别潜在违法合规风险；评估是否投诉或澄清争取等效。
+
+  - id: block_over_specific
+    category: 拦标项
+    description: 参数过细且组合唯一，易形成唯一定制
+    match_type: semantic
+    patterns: ["参数过细", "组合唯一", "非行业通用"]
+    severity: high
+    advice: 收集证据（多个参数组合仅某品牌满足），在澄清会提出。
+
+  # 可能控标信号
+  - id: steer_custom_acceptance
+    category: 可能控标信号
+    description: 非通用的验收/测试方式，指向特定方案
+    match_type: keyword
+    patterns: ["特定测试软件", "指定脚本", "唯一验收工具"]
+    severity: medium
+    advice: 对照行业通行做法，判断是否具有排他性。
+
+  # 关键词提取（示例：根据业务可扩展）
+  - id: kw_guarantee_period
+    category: 关键词提取
+    description: 质保期相关
+    match_type: regex
+    patterns: ["(质保|保修).{0,8}(月|年)"]
+    severity: low
+    advice: 记录质保期，供报价与交付计划参考。
+

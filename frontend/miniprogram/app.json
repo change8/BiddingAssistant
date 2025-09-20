@@ -1,0 +1,11 @@
+{
+  "pages": [
+    "pages/home/home"
+  ],
+  "window": {
+    "navigationBarTitleText": "投标助手",
+    "navigationBarBackgroundColor": "#ffffff",
+    "backgroundTextStyle": "dark"
+  }
+}
+
