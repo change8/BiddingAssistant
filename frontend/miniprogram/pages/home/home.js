@@ -7,6 +7,23 @@ const severityMap = {
   low: '低风险'
 }
 
+function normalizeResult(result = {}) {
+  const categories = result.categories || {}
+  const normalized = {}
+  Object.keys(categories).forEach((cat) => {
+    normalized[cat] = (categories[cat] || []).map((item) => ({
+      ...item,
+      severityLabel: severityMap[item.severity] || item.severity,
+      items: item.items || [],
+      evidences: item.evidences || []
+    }))
+  })
+  return {
+    summary: result.summary || {},
+    categories: normalized
+  }
+}
+
 Page({
   data: {
     input: '',
@@ -64,15 +81,15 @@ Page({
   _handleJob(job) {
     const status = job.status || ''
     if (status === 'completed' && job.result) {
-      const result = job.result || {}
-      const categories = result.categories || {}
-      const summary = result.summary || {}
+      const normalized = normalizeResult(job.result)
+      const categories = normalized.categories || {}
+      const summary = normalized.summary || {}
       const keys = Object.keys(categories)
       const summaryKeys = Object.keys(summary)
       this.setData({
         loading: false,
         status: '分析完成',
-        result,
+        result: normalized,
         keys,
         summary,
         summaryKeys,

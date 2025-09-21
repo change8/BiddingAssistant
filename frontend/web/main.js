@@ -87,9 +87,41 @@ function renderResults(result) {
       const cfg = severityStyles[hit.severity] || severityStyles.medium
       badge.textContent = cfg.text
       badge.className = cfg.className
-      hitNode.querySelector('.snippet').textContent = hit.snippet || hit.evidence || ''
+
+      const summaryEl = hitNode.querySelector('.summary')
+      summaryEl.textContent = hit.summary || ''
+      summaryEl.style.display = summaryEl.textContent ? 'block' : 'none'
+
+      const itemsEl = hitNode.querySelector('.items')
+      itemsEl.innerHTML = ''
+      if (Array.isArray(hit.items) && hit.items.length) {
+        itemsEl.style.display = 'block'
+        hit.items.forEach((text) => {
+          const li = document.createElement('li')
+          li.textContent = text
+          itemsEl.appendChild(li)
+        })
+      } else {
+        itemsEl.style.display = 'none'
+      }
+
+      const evidenceList = hitNode.querySelector('.evidence-list')
+      evidenceList.innerHTML = ''
+      const evidences = hit.evidences || []
+      if (evidences.length) {
+        evidences.forEach((ev) => {
+          const li = document.createElement('li')
+          li.textContent = ev.snippet || ev.evidence || ''
+          evidenceList.appendChild(li)
+        })
+      } else {
+        hitNode.querySelector('.evidence').style.display = 'none'
+      }
+
       const advice = hitNode.querySelector('.advice')
       advice.textContent = hit.advice ? `建议：${hit.advice}` : ''
+      advice.style.display = hit.advice ? 'block' : 'none'
+
       list.appendChild(hitNode)
     })
     els.results.appendChild(catNode)

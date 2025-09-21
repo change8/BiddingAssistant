@@ -52,6 +52,22 @@ class LLMClient:
         # Extend with more providers when needed
         raise NotImplementedError(f"LLM provider '{self.provider}' not implemented")
 
+    def summarize_rule(self, rule: Dict[str, Any], evidences: List[Dict[str, Any]]) -> Dict[str, Any]:
+        provider = (self.provider or "stub").lower()
+        if provider in {"stub", "mock"}:
+            items = [
+                (ev.get("snippet") or ev.get("evidence") or "").strip()
+                for ev in evidences
+                if (ev.get("snippet") or ev.get("evidence"))
+            ]
+            items = [i for i in items if i][:5]
+            return {"summary": rule.get("description"), "items": items}
+        if provider in {"openai", "openai_compatible"}:
+            return self._call_openai_summary(rule, evidences)
+        if provider in {"azure_openai", "azure"}:
+            return self._call_azure_summary(rule, evidences)
+        raise NotImplementedError(f"LLM provider '{self.provider}' not implemented")
+
     # ----------------------------------------------------------------- helpers
     def _heuristic_semantic(
         self,
@@ -127,6 +143,37 @@ class LLMClient:
         content = data["choices"][0]["message"]["content"]
         return self._parse_semantic_response(content)
 
+    def _call_openai_summary(
+        self,
+        rule: Dict[str, Any],
+        evidences: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        if requests is None:
+            raise RuntimeError("requests 库未安装，无法调用 OpenAI 接口")
+        api_key = self.api_key or self.options.get("api_key")
+        if not api_key:
+            raise RuntimeError("缺少 OpenAI API key")
+        url = self.base_url or "https://api.openai.com/v1/chat/completions"
+        model = self.model or self.options.get("model") or "gpt-4o-mini"
+        prompt = self._build_summary_prompt(rule, evidences)
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": "你是投标标书分析助手，必须返回 JSON。"},
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0,
+        }
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        response = requests.post(url, headers=headers, json=payload, timeout=self.timeout)
+        response.raise_for_status()
+        data = response.json()
+        content = data["choices"][0]["message"]["content"]
+        return self._parse_summary_response(content)
+
     def _call_azure(
         self,
         text: str,
@@ -160,6 +207,37 @@ class LLMClient:
         content = data["choices"][0]["message"]["content"]
         return self._parse_semantic_response(content)
 
+    def _call_azure_summary(
+        self,
+        rule: Dict[str, Any],
+        evidences: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        if requests is None:
+            raise RuntimeError("requests 库未安装，无法调用 Azure OpenAI 接口")
+        api_key = self.api_key or self.options.get("api_key") or self.options.get("key")
+        endpoint = self.base_url or self.options.get("endpoint")
+        deployment = self.options.get("deployment") or self.model
+        if not (api_key and endpoint and deployment):
+            raise RuntimeError("Azure OpenAI 配置缺失 (api_key / endpoint / deployment)")
+        url = f"{endpoint.rstrip('/')}/openai/deployments/{deployment}/chat/completions?api-version=2023-07-01-preview"
+        prompt = self._build_summary_prompt(rule, evidences)
+        payload = {
+            "messages": [
+                {"role": "system", "content": "你是投标标书分析助手，必须返回 JSON。"},
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0,
+        }
+        headers = {
+            "api-key": api_key,
+            "Content-Type": "application/json",
+        }
+        response = requests.post(url, headers=headers, json=payload, timeout=self.timeout)
+        response.raise_for_status()
+        data = response.json()
+        content = data["choices"][0]["message"]["content"]
+        return self._parse_summary_response(content)
+
     # ---------------------------------------------------------------- parsing
     def _build_semantic_prompt(
         self,
@@ -189,6 +267,24 @@ class LLMClient:
         }
         return json.dumps(prompt, ensure_ascii=False)
 
+    def _build_summary_prompt(self, rule: Dict[str, Any], evidences: List[Dict[str, Any]]) -> str:
+        trimmed = []
+        for ev in evidences:
+            text = (ev.get("snippet") or ev.get("evidence") or "").strip()
+            if not text:
+                continue
+            trimmed.append(text[:800])
+            if len(trimmed) >= 6:
+                break
+
+        payload = {
+            "task": "extract_requirements",
+            "rule": rule,
+            "evidences": trimmed,
+            "instruction": "结合 evidences，提炼与 rule 相关的具体要求或条件。输出 JSON：{\"summary\": string, \"items\": string[] }。items 里列出明确可执行的条目，忽略无关内容，不要杜撰。",
+        }
+        return json.dumps(payload, ensure_ascii=False)
+
     def _parse_semantic_response(self, content: str) -> List[Dict[str, Any]]:
         try:
             parsed = json.loads(content)
@@ -210,3 +306,18 @@ class LLMClient:
         except Exception:
             return []
 
+    def _parse_summary_response(self, content: str) -> Dict[str, Any]:
+        try:
+            parsed = json.loads(content)
+            if not isinstance(parsed, dict):
+                return {}
+            summary = parsed.get("summary") or parsed.get("main") or parsed.get("overview")
+            items = parsed.get("items") or parsed.get("bullet_points") or []
+            if isinstance(items, str):
+                items = [items]
+            if not isinstance(items, list):
+                items = []
+            items = [str(i).strip() for i in items if str(i).strip()]
+            return {"summary": summary, "items": items}
+        except Exception:
+            return {}

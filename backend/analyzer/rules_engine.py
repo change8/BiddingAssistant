@@ -24,6 +24,8 @@ class Hit:
     snippet: str
     evidence: str
     description: str
+    start: int
+    length: int
     advice: Optional[str]
 
 
@@ -43,32 +45,14 @@ class RulesEngine:
             elif r.match_type == "semantic":
                 hits.extend(self._match_semantic(r, text))
 
-        # group by category
-        categories: Dict[str, List[Dict[str, Any]]] = {}
-        for h in hits:
-            categories.setdefault(h.category, []).append(
-                {
-                    "rule_id": h.rule_id,
-                    "description": h.description,
-                    "severity": h.severity,
-                    "snippet": h.snippet,
-                    "evidence": h.evidence,
-                    "advice": h.advice,
-                }
-            )
+        aggregated = self._aggregate_hits(hits)
 
-        # sort items in each category by severity weight
-        weight = {"critical": 4, "high": 3, "medium": 2, "low": 1}
-        for cat in categories:
-            categories[cat].sort(key=lambda x: -weight.get(x.get("severity", "medium"), 2))
+        summary = {cat: len(items) for cat, items in aggregated.items()}
 
         return {
-            "summary": self._build_summary(categories),
-            "categories": categories,
+            "summary": summary,
+            "categories": aggregated,
         }
-
-    def _build_summary(self, categories: Dict[str, Any]) -> Dict[str, Any]:
-        return {cat: len(items) for cat, items in categories.items()}
 
     def _match_keyword(self, rule: Rule, text: str) -> List[Hit]:
         hits: List[Hit] = []
@@ -86,6 +70,8 @@ class RulesEngine:
                         snippet=snippet,
                         evidence=text[idx : idx + len(kw)],
                         description=rule.description,
+                        start=idx,
+                        length=len(kw),
                         advice=rule.advice,
                     )
                 )
@@ -106,6 +92,8 @@ class RulesEngine:
                             snippet=snippet,
                             evidence=m.group(0),
                             description=rule.description,
+                            start=m.start(),
+                            length=m.end() - m.start(),
                             advice=rule.advice,
                         )
                     )
@@ -145,6 +133,8 @@ class RulesEngine:
                         snippet=snippet,
                         evidence=evidence,
                         description=rule.description,
+                        start=idx,
+                        length=length,
                         advice=rule.advice,
                     )
                 )
@@ -178,3 +168,69 @@ class RulesEngine:
         if not snippet:
             snippet = text[s:e].strip()
         return snippet
+
+    def _aggregate_hits(self, hits: List[Hit]) -> Dict[str, List[Dict[str, Any]]]:
+        grouped: Dict[str, Dict[str, Any]] = {}
+        for hit in hits:
+            key = f"{hit.category}::{hit.rule_id}"
+            bucket = grouped.get(key)
+            evidence_payload = {
+                "snippet": hit.snippet,
+                "evidence": hit.evidence,
+                "start": hit.start,
+                "length": hit.length,
+            }
+            if not bucket:
+                bucket = {
+                    "rule_id": hit.rule_id,
+                    "description": hit.description,
+                    "severity": hit.severity,
+                    "advice": hit.advice,
+                    "category": hit.category,
+                    "evidences": [evidence_payload],
+                }
+                grouped[key] = bucket
+            else:
+                bucket["evidences"].append(evidence_payload)
+
+        categories: Dict[str, List[Dict[str, Any]]] = {}
+        weight = {"critical": 4, "high": 3, "medium": 2, "low": 1}
+
+        for bucket in grouped.values():
+            summary = self._summarize_bucket(bucket)
+            entry = {
+                "rule_id": bucket["rule_id"],
+                "description": bucket["description"],
+                "severity": bucket["severity"],
+                "summary": summary.get("summary"),
+                "items": summary.get("items", []),
+                "evidences": bucket["evidences"],
+                "advice": bucket.get("advice"),
+            }
+            categories.setdefault(bucket["category"], []).append(entry)
+
+        for cat in categories:
+            categories[cat].sort(key=lambda x: -weight.get(x.get("severity", "medium"), 2))
+
+        return categories
+
+    def _summarize_bucket(self, bucket: Dict[str, Any]) -> Dict[str, Any]:
+        evidences = bucket.get("evidences", [])
+        if not evidences:
+            return {"summary": bucket.get("description"), "items": []}
+        if not self.llm:
+            items = [ev.get("snippet") or ev.get("evidence") for ev in evidences if ev.get("snippet") or ev.get("evidence")]
+            return {"summary": bucket.get("description"), "items": items[:5]}
+        try:
+            return self.llm.summarize_rule(
+                rule={
+                    "id": bucket["rule_id"],
+                    "description": bucket["description"],
+                    "severity": bucket["severity"],
+                    "category": bucket["category"],
+                },
+                evidences=evidences,
+            ) or {"summary": bucket.get("description"), "items": []}
+        except Exception:
+            items = [ev.get("snippet") or ev.get("evidence") for ev in evidences if ev.get("snippet") or ev.get("evidence")]
+            return {"summary": bucket.get("description"), "items": items[:5]}
