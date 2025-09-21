@@ -36,11 +36,14 @@
       <view wx:if="{{item2.summary}}" style="margin:6rpx 0;color:#1f2937;">摘要：{{item2.summary}}</view>
       <view wx:if="{{item2.items.length}}" style="margin:6rpx 0 0;color:#334155;">
         <view>要点：</view>
-        <view wx:for="{{item2.items}}" wx:key="index" style="margin-left:16rpx;">• {{item3}}</view>
+        <view wx:for="{{item2.items}}" wx:key="index" style="margin-left:16rpx;">
+          • {{item3.requirement}}
+          <view wx:if="{{item3.evidence && item3.evidence !== item3.requirement}}" style="color:#94a3b8;font-size:22rpx;margin-left:24rpx;">（原文：{{item3.evidence}}）</view>
+        </view>
       </view>
       <view wx:if="{{item2.evidences.length}}" style="color:#475569;font-size:24rpx;margin-top:6rpx;">
         <view>原文：</view>
-        <view wx:for="{{item2.evidences}}" wx:key="index" style="margin-left:16rpx;white-space:pre-wrap;">- {{item3.snippet || item3.evidence}}</view>
+        <view wx:for="{{item2.evidences}}" wx:key="index" style="margin-left:16rpx;white-space:pre-wrap;">- {{item3}}</view>
       </view>
       <view wx:if="{{item2.advice}}" style="color:#999;margin-top:6rpx;">建议：{{item2.advice}}</view>
     </view>

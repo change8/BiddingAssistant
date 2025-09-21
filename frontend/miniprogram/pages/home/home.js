@@ -14,8 +14,11 @@ function normalizeResult(result = {}) {
     normalized[cat] = (categories[cat] || []).map((item) => ({
       ...item,
       severityLabel: severityMap[item.severity] || item.severity,
-      items: item.items || [],
-      evidences: item.evidences || []
+      items: (item.items || []).map((i) => ({
+        requirement: (i && i.requirement) || (typeof i === 'string' ? i : ''),
+        evidence: (i && i.evidence) || (typeof i === 'string' ? i : '')
+      })),
+      evidences: (item.evidences || []).map((ev) => ev.snippet || ev.evidence || '')
     }))
   })
   return {

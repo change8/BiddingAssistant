@@ -253,6 +253,13 @@ button:hover {
   margin-bottom: 4px;
 }
 
+.hit .items .evidence-inline {
+  display: block;
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
 .hit .evidence {
   margin-top: 10px;
   background: #f8fafc;

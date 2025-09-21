@@ -219,8 +219,15 @@ class RulesEngine:
         if not evidences:
             return {"summary": bucket.get("description"), "items": []}
         if not self.llm:
-            items = [ev.get("snippet") or ev.get("evidence") for ev in evidences if ev.get("snippet") or ev.get("evidence")]
-            return {"summary": bucket.get("description"), "items": items[:5]}
+            items = []
+            for ev in evidences:
+                text = (ev.get("snippet") or ev.get("evidence"))
+                if not text:
+                    continue
+                items.append({"requirement": text, "evidence": text})
+                if len(items) >= 5:
+                    break
+            return {"summary": bucket.get("description"), "items": items}
         try:
             return self.llm.summarize_rule(
                 rule={
@@ -232,5 +239,12 @@ class RulesEngine:
                 evidences=evidences,
             ) or {"summary": bucket.get("description"), "items": []}
         except Exception:
-            items = [ev.get("snippet") or ev.get("evidence") for ev in evidences if ev.get("snippet") or ev.get("evidence")]
-            return {"summary": bucket.get("description"), "items": items[:5]}
+            fallback_items = []
+            for ev in evidences:
+                text = (ev.get("snippet") or ev.get("evidence"))
+                if not text:
+                    continue
+                fallback_items.append({"requirement": text, "evidence": text})
+                if len(fallback_items) >= 5:
+                    break
+            return {"summary": bucket.get("description"), "items": fallback_items}

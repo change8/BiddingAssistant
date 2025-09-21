@@ -55,12 +55,14 @@ class LLMClient:
     def summarize_rule(self, rule: Dict[str, Any], evidences: List[Dict[str, Any]]) -> Dict[str, Any]:
         provider = (self.provider or "stub").lower()
         if provider in {"stub", "mock"}:
-            items = [
-                (ev.get("snippet") or ev.get("evidence") or "").strip()
-                for ev in evidences
-                if (ev.get("snippet") or ev.get("evidence"))
-            ]
-            items = [i for i in items if i][:5]
+            items = []
+            for ev in evidences:
+                text = (ev.get("snippet") or ev.get("evidence") or "").strip()
+                if not text:
+                    continue
+                items.append({"requirement": text, "evidence": text})
+                if len(items) >= 5:
+                    break
             return {"summary": rule.get("description"), "items": items}
         if provider in {"openai", "openai_compatible"}:
             return self._call_openai_summary(rule, evidences)
@@ -269,19 +271,19 @@ class LLMClient:
 
     def _build_summary_prompt(self, rule: Dict[str, Any], evidences: List[Dict[str, Any]]) -> str:
         trimmed = []
-        for ev in evidences:
+        for idx, ev in enumerate(evidences, start=1):
             text = (ev.get("snippet") or ev.get("evidence") or "").strip()
             if not text:
                 continue
-            trimmed.append(text[:800])
+            trimmed.append({"id": idx, "text": text[:1200]})
             if len(trimmed) >= 6:
                 break
 
         payload = {
-            "task": "extract_requirements",
+            "task": "extract_rule_requirements",
             "rule": rule,
             "evidences": trimmed,
-            "instruction": "结合 evidences，提炼与 rule 相关的具体要求或条件。输出 JSON：{\"summary\": string, \"items\": string[] }。items 里列出明确可执行的条目，忽略无关内容，不要杜撰。",
+            "instruction": "你是一名投标文件分析专家。请仅依据 evidences 内容，提取与 rule 描述相关的明确条款或要求。返回 JSON：{\"summary\": string, \"items\": [{\"requirement\": string, \"evidence\": string}] }。summary 为总体概述；items 中每一项的 requirement 需引用或紧贴原文，evidence 必须摘自提供的 evidences 文本，若无足够信息则返回空数组。禁止臆造。",
         }
         return json.dumps(payload, ensure_ascii=False)
 
@@ -313,11 +315,22 @@ class LLMClient:
                 return {}
             summary = parsed.get("summary") or parsed.get("main") or parsed.get("overview")
             items = parsed.get("items") or parsed.get("bullet_points") or []
-            if isinstance(items, str):
+            normalized = []
+            if isinstance(items, dict):
                 items = [items]
-            if not isinstance(items, list):
-                items = []
-            items = [str(i).strip() for i in items if str(i).strip()]
-            return {"summary": summary, "items": items}
+            if isinstance(items, list):
+                for item in items:
+                    if isinstance(item, dict):
+                        requirement = str(item.get("requirement") or item.get("text") or item.get("point") or "").strip()
+                        evidence = str(item.get("evidence") or item.get("quote") or item.get("source") or "").strip()
+                        if requirement:
+                            normalized.append({"requirement": requirement, "evidence": evidence})
+                    else:
+                        text = str(item).strip()
+                        if text:
+                            normalized.append({"requirement": text, "evidence": text})
+            elif isinstance(items, str) and items.strip():
+                normalized.append({"requirement": items.strip(), "evidence": items.strip()})
+            return {"summary": summary, "items": normalized}
         except Exception:
             return {}

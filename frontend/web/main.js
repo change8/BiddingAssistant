@@ -98,7 +98,17 @@ function renderResults(result) {
         itemsEl.style.display = 'block'
         hit.items.forEach((text) => {
           const li = document.createElement('li')
-          li.textContent = text
+          if (text && typeof text === 'object') {
+            li.textContent = text.requirement || text.evidence || ''
+            if (text.evidence && text.evidence !== text.requirement) {
+              const span = document.createElement('span')
+              span.className = 'evidence-inline'
+              span.textContent = `（原文：${text.evidence}）`
+              li.appendChild(span)
+            }
+          } else {
+            li.textContent = text
+          }
           itemsEl.appendChild(li)
         })
       } else {
