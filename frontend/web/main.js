@@ -1,5 +1,24 @@
 const API_BASE = window.BIDDING_ASSISTANT_API || window.location.origin
 
+const severityStyles = {
+  critical: { text: '高风险', className: 'badge critical' },
+  high: { text: '较高风险', className: 'badge high' },
+  medium: { text: '中风险', className: 'badge medium' },
+  low: { text: '低风险', className: 'badge low' }
+}
+
+const ruleDescriptions = new Map()
+fetch(`${API_BASE}/rules`)
+  .then((resp) => (resp.ok ? resp.json() : Promise.reject()))
+  .then((data) => {
+    for (const item of data.rules || []) {
+      ruleDescriptions.set(item.id, item.description)
+    }
+  })
+  .catch(() => {
+    /* 忽略规则列表请求失败 */
+  })
+
 const els = {
   file: document.getElementById('fileInput'),
   text: document.getElementById('textInput'),
@@ -61,8 +80,13 @@ function renderResults(result) {
 
     items.forEach((hit) => {
       const hitNode = els.hitTemplate.content.cloneNode(true)
-      hitNode.querySelector('.rule').textContent = hit.rule_id
-      hitNode.querySelector('.severity').textContent = hit.severity
+      const ruleName = hit.description || ruleDescriptions.get(hit.rule_id) || hit.rule_id
+      hitNode.querySelector('.rule').textContent = ruleName
+
+      const badge = hitNode.querySelector('.severity')
+      const cfg = severityStyles[hit.severity] || severityStyles.medium
+      badge.textContent = cfg.text
+      badge.className = cfg.className
       hitNode.querySelector('.snippet').textContent = hit.snippet || hit.evidence || ''
       const advice = hitNode.querySelector('.advice')
       advice.textContent = hit.advice ? `建议：${hit.advice}` : ''

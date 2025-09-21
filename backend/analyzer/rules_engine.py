@@ -23,6 +23,7 @@ class Hit:
     severity: str
     snippet: str
     evidence: str
+    description: str
     advice: Optional[str]
 
 
@@ -48,6 +49,7 @@ class RulesEngine:
             categories.setdefault(h.category, []).append(
                 {
                     "rule_id": h.rule_id,
+                    "description": h.description,
                     "severity": h.severity,
                     "snippet": h.snippet,
                     "evidence": h.evidence,
@@ -70,10 +72,11 @@ class RulesEngine:
 
     def _match_keyword(self, rule: Rule, text: str) -> List[Hit]:
         hits: List[Hit] = []
+        lower_text = text.lower()
         for kw in rule.patterns:
-            # simple case-insensitive search (Chinese unaffected)
-            idx = text.lower().find(kw.lower())
-            if idx >= 0:
+            pattern = kw.lower()
+            idx = lower_text.find(pattern)
+            while idx >= 0:
                 snippet = self._context(text, idx, len(kw))
                 hits.append(
                     Hit(
@@ -81,10 +84,12 @@ class RulesEngine:
                         category=rule.category,
                         severity=rule.severity,
                         snippet=snippet,
-                        evidence=kw,
+                        evidence=text[idx : idx + len(kw)],
+                        description=rule.description,
                         advice=rule.advice,
                     )
                 )
+                idx = lower_text.find(pattern, idx + len(pattern) if len(pattern) else idx + 1)
         return hits
 
     def _match_regex(self, rule: Rule, text: str) -> List[Hit]:
@@ -100,6 +105,7 @@ class RulesEngine:
                             severity=rule.severity,
                             snippet=snippet,
                             evidence=m.group(0),
+                            description=rule.description,
                             advice=rule.advice,
                         )
                     )
@@ -138,6 +144,7 @@ class RulesEngine:
                         severity=rule.severity,
                         snippet=snippet,
                         evidence=evidence,
+                        description=rule.description,
                         advice=rule.advice,
                     )
                 )
@@ -146,7 +153,28 @@ class RulesEngine:
         return hits
 
     @staticmethod
-    def _context(text: str, start: int, length: int, window: int = 90) -> str:
+    def _context(text: str, start: int, length: int, window: int = 120) -> str:
+        if not text:
+            return ""
+
         s = max(0, start - window)
         e = min(len(text), start + length + window)
-        return text[s:e].strip()
+
+        # try to expand to sentence boundaries using common punctuation
+        punct = "。．！？!?；;\n"
+        left = start
+        while left > 0 and text[left - 1] not in punct:
+            left -= 1
+            if left <= s:
+                break
+
+        right = start + length
+        while right < len(text) and text[right] not in punct:
+            right += 1
+            if right >= e:
+                break
+
+        snippet = text[max(left, s):min(right + 1, e)].strip()
+        if not snippet:
+            snippet = text[s:e].strip()
+        return snippet

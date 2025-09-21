@@ -1,5 +1,12 @@
 const { API_BASE } = require('../../utils/config')
 
+const severityMap = {
+  critical: '高风险',
+  high: '较高风险',
+  medium: '中风险',
+  low: '低风险'
+}
+
 Page({
   data: {
     input: '',
@@ -57,14 +64,15 @@ Page({
   _handleJob(job) {
     const status = job.status || ''
     if (status === 'completed' && job.result) {
-      const categories = job.result.categories || {}
-      const summary = job.result.summary || {}
+      const result = job.result || {}
+      const categories = result.categories || {}
+      const summary = result.summary || {}
       const keys = Object.keys(categories)
       const summaryKeys = Object.keys(summary)
       this.setData({
         loading: false,
         status: '分析完成',
-        result: job.result,
+        result,
         keys,
         summary,
         summaryKeys,
@@ -102,4 +110,3 @@ Page({
     }, 1500)
   }
 })
-
