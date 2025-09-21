@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>投标助手 - Web 原型</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="nav">
+      <h1>投标助手</h1>
+      <p>上传 PDF/Word/TXT，快速提取要点与风险。</p>
+    </header>
+
+    <main class="layout">
+      <section class="panel">
+        <h2>上传文件或粘贴文本</h2>
+        <div class="input-group">
+          <label for="fileInput">选择标书文件（支持 PDF / DOCX / TXT）</label>
+          <input type="file" id="fileInput" accept=".pdf,.docx,.txt,.text,.md" />
+        </div>
+        <div class="input-group">
+          <label for="textInput">或直接粘贴招标文本</label>
+          <textarea id="textInput" rows="12" placeholder="粘贴文本..."></textarea>
+        </div>
+
+        <div class="actions">
+          <button id="analyzeBtn">开始分析</button>
+          <button id="clearBtn" class="secondary">清空</button>
+        </div>
+
+        <div id="status" class="status hidden"></div>
+      </section>
+
+      <section class="panel">
+        <h2>分析结果</h2>
+        <div id="summary" class="summary"></div>
+        <div id="results" class="results"></div>
+      </section>
+    </main>
+
+    <template id="categoryTemplate">
+      <details open class="category">
+        <summary></summary>
+        <ul class="hit-list"></ul>
+      </details>
+    </template>
+
+    <template id="hitTemplate">
+      <li class="hit">
+        <header>
+          <span class="rule"></span>
+          <span class="severity"></span>
+        </header>
+        <pre class="snippet"></pre>
+        <p class="advice"></p>
+      </li>
+    </template>
+
+    <script src="./main.js"></script>
+  </body>
+</html>
+

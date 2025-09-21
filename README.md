@@ -94,6 +94,12 @@ retrieval:
 - 页面逻辑：`frontend/miniprogram/pages/home/home.*`，已改为调后台接口、轮询任务状态并展示分类汇总
 - 如需体验，请在微信开发者工具中导入 `frontend/miniprogram` 目录，并确保后台服务可通过 HTTP 访问
 
+## Web 前端原型
+
+- 目录：`frontend/web`
+- 启动 API 后访问 `http://127.0.0.1:9301/web`，即可使用浏览器版界面上传 PDF/DOCX/TXT、粘贴文本并查看结果
+- 静态资源通过 `FastAPI + StaticFiles` 提供，如需部署到 CDN/静态服务器，可直接发布 `frontend/web` 内的文件
+
 ## 文档抽取与预处理
 
 - 文本归一化：`backend/analyzer/preprocess.py`

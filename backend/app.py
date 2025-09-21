@@ -7,7 +7,8 @@ from typing import Any, Dict, List, Optional
 
 try:
     from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, UploadFile
-    from fastapi.responses import JSONResponse
+    from fastapi.responses import FileResponse, JSONResponse
+    from fastapi.staticfiles import StaticFiles
 except Exception:
     # Allow reading code without FastAPI installed
     FastAPI = object  # type: ignore
@@ -17,6 +18,8 @@ except Exception:
     JSONResponse = dict  # type: ignore
     BackgroundTasks = object  # type: ignore
     Query = lambda *args, **kwargs: None  # type: ignore
+    StaticFiles = object  # type: ignore
+    FileResponse = dict  # type: ignore
 
 from .models import AnalyzeRequest
 from .analyzer.llm import LLMClient
@@ -79,6 +82,18 @@ def create_app(rules_path: str = None, config_path: str = None):  # type: ignore
         return None  # FastAPI not installed; return sentinel
 
     app = FastAPI(title="投标助手 API", version="0.1.0")
+
+    web_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "web")
+    web_dir = os.path.abspath(web_dir)
+    if os.path.isdir(web_dir) and StaticFiles is not object:
+        app.mount("/web/static", StaticFiles(directory=web_dir), name="web-static")
+
+        @app.get("/web")
+        def web_index():
+            index_path = os.path.join(web_dir, "index.html")
+            if not os.path.exists(index_path):
+                raise HTTPException(status_code=404, detail="web 前端未构建")
+            return FileResponse(index_path)
 
     @app.get("/config")
     def get_config():
