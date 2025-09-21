@@ -1,4 +1,4 @@
-const API_BASE = window.BIDDING_ASSISTANT_API || 'http://127.0.0.1:9301'
+const API_BASE = window.BIDDING_ASSISTANT_API || window.location.origin
 
 const els = {
   file: document.getElementById('fileInput'),
