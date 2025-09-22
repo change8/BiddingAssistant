@@ -11,6 +11,7 @@ try:
 except Exception:  # pragma: no cover - optional dependency
     requests = None  # type: ignore
 
+from .framework import DEFAULT_FRAMEWORK, FrameworkCategory
 from .retrieval import HeuristicRetriever, TextSegment, split_text_into_segments
 
 
@@ -68,6 +69,17 @@ class LLMClient:
             return self._call_openai_summary(rule, evidences)
         if provider in {"azure_openai", "azure"}:
             return self._call_azure_summary(rule, evidences)
+        raise NotImplementedError(f"LLM provider '{self.provider}' not implemented")
+
+    def analyze_framework(self, text: str, categories: List[FrameworkCategory] | None = None) -> Dict[str, Any]:
+        selected = categories or DEFAULT_FRAMEWORK
+        provider = (self.provider or "stub").lower()
+        if provider in {"stub", "mock"}:
+            return self._heuristic_framework(text, selected)
+        if provider in {"openai", "openai_compatible"}:
+            return self._call_openai_framework(text, selected)
+        if provider in {"azure_openai", "azure"}:
+            return self._call_azure_framework(text, selected)
         raise NotImplementedError(f"LLM provider '{self.provider}' not implemented")
 
     # ----------------------------------------------------------------- helpers
