@@ -7,18 +7,6 @@ const severityStyles = {
   low: { text: '低风险', className: 'badge low' }
 }
 
-const ruleDescriptions = new Map()
-fetch(`${API_BASE}/rules`)
-  .then((resp) => (resp.ok ? resp.json() : Promise.reject()))
-  .then((data) => {
-    for (const item of data.rules || []) {
-      ruleDescriptions.set(item.id, item.description)
-    }
-  })
-  .catch(() => {
-    /* 忽略规则列表请求失败 */
-  })
-
 const els = {
   file: document.getElementById('fileInput'),
   text: document.getElementById('textInput'),
@@ -80,8 +68,8 @@ function renderResults(result) {
 
     items.forEach((hit) => {
       const hitNode = els.hitTemplate.content.cloneNode(true)
-      const ruleName = hit.description || ruleDescriptions.get(hit.rule_id) || hit.rule_id
-      hitNode.querySelector('.rule').textContent = ruleName
+      const title = hit.title || category
+      hitNode.querySelector('.rule').textContent = title
 
       const badge = hitNode.querySelector('.severity')
       const cfg = severityStyles[hit.severity] || severityStyles.medium
@@ -89,52 +77,44 @@ function renderResults(result) {
       badge.className = cfg.className
 
       const summaryEl = hitNode.querySelector('.summary')
-      summaryEl.textContent = hit.summary || ''
+      summaryEl.textContent = hit.summary || hit.description || ''
       summaryEl.style.display = summaryEl.textContent ? 'block' : 'none'
 
-      const itemsEl = hitNode.querySelector('.items')
-      itemsEl.innerHTML = ''
-      if (Array.isArray(hit.items) && hit.items.length) {
-        itemsEl.style.display = 'block'
-        hit.items.forEach((text) => {
-          const li = document.createElement('li')
-          if (text && typeof text === 'object') {
-            li.textContent = text.requirement || text.evidence || ''
-            if (text.evidence && text.evidence !== text.requirement) {
-              const span = document.createElement('span')
-              span.className = 'evidence-inline'
-              span.textContent = `（原文：${text.evidence}）`
-              li.appendChild(span)
-            }
-          } else {
-            li.textContent = text
-          }
-          itemsEl.appendChild(li)
-        })
-      } else {
-        itemsEl.style.display = 'none'
-      }
-
-      const evidenceList = hitNode.querySelector('.evidence-list')
-      evidenceList.innerHTML = ''
-      const evidences = hit.evidences || []
-      if (evidences.length) {
-        evidences.forEach((ev) => {
-          const li = document.createElement('li')
-          li.textContent = ev.snippet || ev.evidence || ''
-          evidenceList.appendChild(li)
-        })
-      } else {
-        hitNode.querySelector('.evidence').style.display = 'none'
-      }
+      const evidenceEl = hitNode.querySelector('.evidence')
+      evidenceEl.textContent = hit.evidence || ''
+      evidenceEl.style.display = hit.evidence ? 'block' : 'none'
 
       const advice = hitNode.querySelector('.advice')
-      advice.textContent = hit.advice ? `建议：${hit.advice}` : ''
-      advice.style.display = hit.advice ? 'block' : 'none'
+      advice.textContent = hit.recommendation ? `建议：${hit.recommendation}` : ''
+      advice.style.display = hit.recommendation ? 'block' : 'none'
 
       list.appendChild(hitNode)
     })
     els.results.appendChild(catNode)
+  }
+
+  if (result.timeline && (result.timeline.milestones || result.timeline.remark)) {
+    const timelineSection = document.createElement('section')
+    timelineSection.className = 'panel'
+    const title = document.createElement('h2')
+    title.textContent = '时间计划'
+    timelineSection.appendChild(title)
+    const list = document.createElement('ul')
+    list.className = 'timeline-list'
+    ;(result.timeline.milestones || []).forEach((m) => {
+      const li = document.createElement('li')
+      li.textContent = `${m.name || '节点'}${m.deadline ? ' · 截止：' + m.deadline : ''}${
+        m.note ? ' · ' + m.note : ''
+      }`
+      list.appendChild(li)
+    })
+    if (list.childElementCount) timelineSection.appendChild(list)
+    if (result.timeline.remark) {
+      const remark = document.createElement('p')
+      remark.textContent = `备注：${result.timeline.remark}`
+      timelineSection.appendChild(remark)
+    }
+    els.results.appendChild(timelineSection)
   }
 }
 

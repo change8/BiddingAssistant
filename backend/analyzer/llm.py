@@ -334,3 +334,187 @@ class LLMClient:
             return {"summary": summary, "items": normalized}
         except Exception:
             return {}
+
+    def _heuristic_framework(self, text: str, categories: List[FrameworkCategory]) -> Dict[str, Any]:
+        segments = split_text_into_segments(text, max_chars=800)
+        result_categories = []
+        for cat in categories:
+            snippets = [seg.text for seg in segments if any(keyword in seg.text for keyword in cat.title.split("/"))]
+            items = []
+            for snippet in snippets[:5]:
+                items.append(
+                    {
+                        "title": cat.title,
+                        "description": snippet[:200],
+                        "evidence": snippet[:400],
+                        "recommendation": "",
+                        "severity": cat.severity,
+                    }
+                )
+            result_categories.append({"id": cat.id, "title": cat.title, "items": items, "summary": cat.description})
+        return {"categories": result_categories, "timeline": {"milestones": [], "remark": ""}}
+
+    def _call_openai_framework(
+        self,
+        text: str,
+        categories: List[FrameworkCategory],
+    ) -> Dict[str, Any]:
+        if requests is None:
+            raise RuntimeError("requests 库未安装，无法调用 OpenAI 接口")
+        api_key = self.api_key or self.options.get("api_key")
+        if not api_key:
+            raise RuntimeError("缺少 OpenAI API key")
+        url = self.base_url or "https://api.openai.com/v1/chat/completions"
+        model = self.model or self.options.get("model") or "gpt-4o-mini"
+        prompt = self._build_framework_prompt(text, categories)
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": "你是投标标书分析专家，必须按要求返回 JSON，禁止虚构。"},
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0,
+        }
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        response = requests.post(url, headers=headers, json=payload, timeout=self.timeout)
+        response.raise_for_status()
+        content = response.json()["choices"][0]["message"]["content"]
+        return self._parse_framework_response(content)
+
+    def _call_azure_framework(
+        self,
+        text: str,
+        categories: List[FrameworkCategory],
+    ) -> Dict[str, Any]:
+        if requests is None:
+            raise RuntimeError("requests 库未安装，无法调用 Azure OpenAI 接口")
+        api_key = self.api_key or self.options.get("api_key") or self.options.get("key")
+        endpoint = self.base_url or self.options.get("endpoint")
+        deployment = self.options.get("deployment") or self.model
+        if not (api_key and endpoint and deployment):
+            raise RuntimeError("Azure OpenAI 配置缺失 (api_key / endpoint / deployment)")
+        url = f"{endpoint.rstrip('/')}/openai/deployments/{deployment}/chat/completions?api-version=2023-07-01-preview"
+        prompt = self._build_framework_prompt(text, categories)
+        payload = {
+            "messages": [
+                {"role": "system", "content": "你是投标标书分析专家，必须按要求返回 JSON，禁止虚构。"},
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0,
+        }
+        headers = {
+            "api-key": api_key,
+            "Content-Type": "application/json",
+        }
+        response = requests.post(url, headers=headers, json=payload, timeout=self.timeout)
+        response.raise_for_status()
+        content = response.json()["choices"][0]["message"]["content"]
+        return self._parse_framework_response(content)
+
+    def _build_framework_prompt(self, text: str, categories: List[FrameworkCategory]) -> str:
+        framework = [
+            {
+                "id": cat.id,
+                "title": cat.title,
+                "description": cat.description,
+                "default_severity": cat.severity,
+            }
+            for cat in categories
+        ]
+
+        payload = {
+            "task": "tender_overview",
+            "instructions": (
+                "仔细阅读 document，从 framework 的视角总结投标要点。"
+                " 对每个类别输出 summary 与 0-6 条 items。"
+                " 每个 item 需包含 title、description、evidence、recommendation（可空）、severity。"
+                " severity 必须是 critical/high/medium/low 中之一，可结合 default_severity。"
+                " evidence 必须引用原文或复述原文关键字段。"
+                " 同时输出 timeline，包含 milestones（数组，元素为 {name, deadline, note}）与 remark。"
+                " 全部内容仅能依据 document，严禁杜撰。最终仅返回 JSON：{\"categories\":[...],\"timeline\":{...}}。"
+            ),
+            "framework": framework,
+            "document": text[:20000],
+        }
+        return json.dumps(payload, ensure_ascii=False)
+
+    def _parse_framework_response(self, content: str) -> Dict[str, Any]:
+        try:
+            parsed = json.loads(content)
+            if not isinstance(parsed, dict):
+                return {}
+            categories = parsed.get("categories") or []
+            timeline = parsed.get("timeline") or {}
+            if not isinstance(categories, list):
+                categories = []
+            normalized_categories = []
+            for cat in categories:
+                if not isinstance(cat, dict):
+                    continue
+                items = cat.get("items") or []
+                if isinstance(items, dict):
+                    items = [items]
+                normalized_items = []
+                for item in items:
+                    if isinstance(item, dict):
+                        normalized_items.append(
+                            {
+                                "title": str(item.get("title") or item.get("name") or "").strip(),
+                                "description": str(item.get("description") or item.get("detail") or "").strip(),
+                                "evidence": str(item.get("evidence") or item.get("source") or "").strip(),
+                                "recommendation": str(item.get("recommendation") or item.get("advice") or "").strip(),
+                                "severity": (item.get("severity") or item.get("level") or "medium").lower(),
+                            }
+                        )
+                    else:
+                        text_item = str(item).strip()
+                        if text_item:
+                            normalized_items.append(
+                                {
+                                    "title": text_item,
+                                    "description": text_item,
+                                    "evidence": text_item,
+                                    "recommendation": "",
+                                    "severity": "medium",
+                                }
+                            )
+                normalized_categories.append(
+                    {
+                        "id": cat.get("id"),
+                        "title": cat.get("title"),
+                        "summary": cat.get("summary") or cat.get("overview") or "",
+                        "items": normalized_items,
+                    }
+                )
+            if isinstance(timeline, list):
+                timeline = {"milestones": timeline, "remark": ""}
+            elif isinstance(timeline, dict):
+                milestones = timeline.get("milestones") or timeline.get("items") or []
+                if isinstance(milestones, dict):
+                    milestones = [milestones]
+                normalized_milestones = []
+                for m in milestones:
+                    if isinstance(m, dict):
+                        normalized_milestones.append(
+                            {
+                                "name": str(m.get("name") or m.get("title") or "").strip(),
+                                "deadline": str(m.get("deadline") or m.get("date") or "").strip(),
+                                "note": str(m.get("note") or m.get("description") or "").strip(),
+                            }
+                        )
+                    else:
+                        text_m = str(m).strip()
+                        if text_m:
+                            normalized_milestones.append({"name": text_m, "deadline": "", "note": ""})
+                timeline = {
+                    "milestones": normalized_milestones,
+                    "remark": timeline.get("remark") or timeline.get("summary") or "",
+                }
+            else:
+                timeline = {"milestones": [], "remark": ""}
+            return {"categories": normalized_categories, "timeline": timeline}
+        except Exception:
+            return {"categories": [], "timeline": {"milestones": [], "remark": ""}}

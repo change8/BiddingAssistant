@@ -18,8 +18,7 @@
 
 ## 快速开始（原型）
 
-- 规则模板：`backend/rules/checklist.zh-CN.yaml`
-- CLI 演示：`backend/cli_demo.py`（基于关键词/正则启发式，LLM 为占位）
+- LLM 分析：`backend/analyzer/tender_llm.py`（基于大模型的全文分析框架）
 - 小程序壳：`frontend/miniprogram`（上传入口与结果展示占位）
 
 ## 后端 API（MVP）
@@ -42,7 +41,6 @@ uvicorn backend.app:create_app --factory --host 0.0.0.0 --port 8000
 
 主要接口：
 
-- `GET /rules`：返回当前加载的规则模板
 - `POST /analyze/text`：传入 `text` 字段，立即触发分析（默认同步返回）
 - `POST /analyze/file`：上传文件，后台完成抽取后分析，可选轮询 `/jobs/{job_id}`
 - `GET /jobs/{job_id}` / `GET /jobs` / `DELETE /jobs/{job_id}`：任务状态管理
@@ -100,26 +98,26 @@ retrieval:
 - 启动 API 后访问 `http://127.0.0.1:9301/web`，即可使用浏览器版界面上传 PDF/DOCX/TXT、粘贴文本并查看结果
 - 静态资源通过 `FastAPI + StaticFiles` 提供，如需部署到 CDN/静态服务器，可直接发布 `frontend/web` 内的文件
 
-## 文档抽取与预处理
+## LLM 分析框架
 
-- 文本归一化：`backend/analyzer/preprocess.py`
-- 抽取调度：`backend/extractors/dispatcher.py`（自动识别 txt/docx/pdf，并在必要时触发 OCR）
-- OCR（可选）：集成 `pytesseract`/`pdf2image`，缺省时自动跳过
-- 分段检索：`backend/analyzer/retrieval.py` 提供启发式与向量检索两种能力，可与 LLM 协同
+- 框架定义：`backend/analyzer/framework.py` 指定默认的关注维度（废标项、评分点、成本影响、时间计划、风险等）
+- 分析流程：`backend/analyzer/tender_llm.py` 负责调用 LLM，总结每个维度的要点与原文证据
+- LLM 客户端：`backend/analyzer/llm.py` 提供统一封装，兼容 Ollama/OpenAI/Azure 等接口
 
 ## 分析流程（MVP）
 
 1) 文档获取：上传文件（txt/pdf/docx）或直接粘贴文本
 2) 文本抽取：优先使用原生文本，必要时 OCR（占位接口）
-3) 规则匹配：关键词/正则/（可选）语义匹配（LLM）
-4) 分类整理：按类别聚合、标注证据片段、给出建议/澄清点
-5) 输出结果：JSON 结构供前端展示；支持导出 markdown
+3) 大模型阅读：按照预设框架生成废标项、评分点、成本/时间计划、风险建议等内容
+4) 原文引用：输出每条要点对应的原文证据，辅助人工复核
+5) 时间计划：抽取/总结关键里程碑，生成提醒
+6) 输出结果：JSON 结构供前端展示；支持导出 markdown
 
 ## 关键设计
 
-- 规则可配置：YAML 定义类别、严重度、匹配模式（keyword/regex/semantic）
+- 框架可配置：可通过 `framework.py` 增加/修改关注维度
 - LLM 可插拔：`backend/analyzer/llm.py` 提供统一接口，便于切换供应商
-- 审计可追溯：每条命中保留文本证据与命中的规则 id
+- 审计可追溯：每条要点保留原文证据与大模型建议
 
 ## 下一步建议
 

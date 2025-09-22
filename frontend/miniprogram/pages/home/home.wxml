@@ -3,6 +3,18 @@
   <text wx:if="{{jobId}}" class="job-id">任务ID：{{jobId}}</text>
 </view>
 
+<view class="card" wx:if="{{result.timeline}}">
+  <view class="title">时间计划</view>
+  <view wx:if="{{result.timeline.milestones.length}}" style="margin-top:12rpx;">
+    <view wx:for="{{result.timeline.milestones}}" wx:key="index" style="margin-bottom:8rpx;">
+      <text style="font-weight:600;">{{item.name || '节点'}}</text>
+      <text wx:if="{{item.deadline}}"> · 截止：{{item.deadline}}</text>
+      <view wx:if="{{item.note}}" style="color:#6b7280;font-size:24rpx;">{{item.note}}</view>
+    </view>
+  </view>
+  <view wx:if="{{result.timeline.remark}}" style="margin-top:8rpx;color:#475569;">备注：{{result.timeline.remark}}</view>
+</view>
+
 <view class="card">
   <view class="title">粘贴招标文本</view>
   <textarea placeholder="粘贴文本..." bindinput="onInput" value="{{input}}"
@@ -25,27 +37,17 @@
   <view class="title">分析结果</view>
   <view wx:for="{{keys}}" wx:key="*this" style="margin-top:16rpx;">
     <view style="font-weight:600;margin-bottom:8rpx;">{{item}}</view>
-    <view wx:for="{{result.categories[item]}}" wx:key="rule_id" style="border-left:3rpx solid #1677ff;padding-left:12rpx;margin-bottom:12rpx;">
+    <view wx:for="{{result.categories[item]}}" wx:key="index" style="border-left:3rpx solid #1677ff;padding-left:12rpx;margin-bottom:12rpx;">
       <view style="color:#666;display:flex;justify-content:space-between;align-items:center;">
-        <text style="font-weight:600;margin-right:12rpx;">{{item2.description || item2.rule_id}}</text>
+        <text style="font-weight:600;margin-right:12rpx;">{{item2.title}}</text>
         <text style="padding:4rpx 12rpx;border-radius:999rpx;background:#fee2e2;color:#b91c1c;" wx:if="{{item2.severity==='critical'}}">高风险</text>
         <text style="padding:4rpx 12rpx;border-radius:999rpx;background:#fef3c7;color:#c2410c;" wx:if="{{item2.severity==='high'}}">较高风险</text>
         <text style="padding:4rpx 12rpx;border-radius:999rpx;background:#dbeafe;color:#1d4ed8;" wx:if="{{item2.severity==='medium'}}">中风险</text>
         <text style="padding:4rpx 12rpx;border-radius:999rpx;background:#dcfce7;color:#15803d;" wx:if="{{item2.severity==='low'}}">低风险</text>
       </view>
-      <view wx:if="{{item2.summary}}" style="margin:6rpx 0;color:#1f2937;">摘要：{{item2.summary}}</view>
-      <view wx:if="{{item2.items.length}}" style="margin:6rpx 0 0;color:#334155;">
-        <view>要点：</view>
-        <view wx:for="{{item2.items}}" wx:key="index" style="margin-left:16rpx;">
-          • {{item3.requirement}}
-          <view wx:if="{{item3.evidence && item3.evidence !== item3.requirement}}" style="color:#94a3b8;font-size:22rpx;margin-left:24rpx;">（原文：{{item3.evidence}}）</view>
-        </view>
-      </view>
-      <view wx:if="{{item2.evidences.length}}" style="color:#475569;font-size:24rpx;margin-top:6rpx;">
-        <view>原文：</view>
-        <view wx:for="{{item2.evidences}}" wx:key="index" style="margin-left:16rpx;white-space:pre-wrap;">- {{item3}}</view>
-      </view>
-      <view wx:if="{{item2.advice}}" style="color:#999;margin-top:6rpx;">建议：{{item2.advice}}</view>
+      <view wx:if="{{item2.summary}}" style="margin:6rpx 0;color:#1f2937;white-space:pre-wrap;">摘要：{{item2.summary}}</view>
+      <view wx:if="{{item2.evidence}}" style="color:#475569;font-size:24rpx;margin-top:6rpx;white-space:pre-wrap;">原文：{{item2.evidence}}</view>
+      <view wx:if="{{item2.recommendation}}" style="color:#999;margin-top:6rpx;">建议：{{item2.recommendation}}</view>
     </view>
   </view>
 </view>

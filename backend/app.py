@@ -23,8 +23,8 @@ except Exception:
 
 from .models import AnalyzeRequest
 from .analyzer.llm import LLMClient
-from .analyzer.retrieval import EmbeddingRetriever, HeuristicRetriever, merge_retrievals
-from .analyzer.rules_engine import Rule, RulesEngine
+from .analyzer.framework import DEFAULT_FRAMEWORK
+from .analyzer.tender_llm import TenderLLMAnalyzer
 from .config import AppConfig, load_config
 from .services.analyzer_service import AnalysisService, background_runner
 
@@ -34,49 +34,11 @@ except Exception:
     yaml = None
 
 
-def load_rules(path: str) -> List[Rule]:
-    if not os.path.exists(path):
-        return []
-    with open(path, "r", encoding="utf-8") as f:
-        if path.endswith(".json"):
-            data = json.load(f)
-        else:
-            if yaml is None:
-                raise RuntimeError("YAML not available to parse rules")
-            data = yaml.safe_load(f)
-    rules: List[Rule] = []
-    for item in data.get("rules", []):
-        rules.append(
-            Rule(
-                id=item["id"],
-                category=item["category"],
-                description=item.get("description", ""),
-                match_type=item.get("match_type", "keyword"),
-                patterns=item.get("patterns", []),
-                severity=item.get("severity", "medium"),
-                advice=item.get("advice"),
-            )
-        )
-    return rules
-
-
-def _build_retriever(cfg: AppConfig):
-    retrievers = []
-    if cfg.retrieval.enable_heuristic:
-        retrievers.append(HeuristicRetriever(limit=cfg.retrieval.limit))
-    if cfg.retrieval.enable_embedding:
-        retrievers.append(EmbeddingRetriever(model_name=cfg.retrieval.embedding_model or "shibing624/text2vec-base-chinese", limit=cfg.retrieval.limit))
-    return merge_retrievals(*retrievers)
-
-
 def create_app(rules_path: str = None, config_path: str = None):  # type: ignore
-    rules_path = rules_path or os.path.join(os.path.dirname(__file__), "rules", "checklist.zh-CN.yaml")
-    rules = load_rules(rules_path)
     config = load_config(config_path)
     llm = LLMClient(**config.llm.as_kwargs())
-    retriever = _build_retriever(config)
-    engine = RulesEngine(rules, llm=llm, retriever=retriever)
-    service = AnalysisService(engine)
+    analyzer = TenderLLMAnalyzer(llm, categories=DEFAULT_FRAMEWORK)
+    service = AnalysisService(analyzer)
 
     if FastAPI is object:
         return None  # FastAPI not installed; return sentinel
@@ -112,10 +74,6 @@ def create_app(rules_path: str = None, config_path: str = None):  # type: ignore
             },
         }
         return cfg
-
-    @app.get("/rules")
-    def get_rules():
-        return {"rules": [r.__dict__ for r in rules]}
 
     @app.post("/analyze/text")
     async def analyze_text(req: AnalyzeRequest, background_tasks: BackgroundTasks):

@@ -11,19 +11,22 @@ function normalizeResult(result = {}) {
   const categories = result.categories || {}
   const normalized = {}
   Object.keys(categories).forEach((cat) => {
-    normalized[cat] = (categories[cat] || []).map((item) => ({
-      ...item,
-      severityLabel: severityMap[item.severity] || item.severity,
-      items: (item.items || []).map((i) => ({
-        requirement: (i && i.requirement) || (typeof i === 'string' ? i : ''),
-        evidence: (i && i.evidence) || (typeof i === 'string' ? i : '')
-      })),
-      evidences: (item.evidences || []).map((ev) => ev.snippet || ev.evidence || '')
-    }))
+    normalized[cat] = (categories[cat] || []).map((item) => {
+      const severity = item.severity || 'medium'
+      return {
+        title: item.title || cat,
+        summary: item.summary || item.description || '',
+        evidence: item.evidence || '',
+        recommendation: item.recommendation || '',
+        severity,
+        severityLabel: severityMap[severity] || severityMap.medium
+      }
+    })
   })
   return {
     summary: result.summary || {},
-    categories: normalized
+    categories: normalized,
+    timeline: result.timeline || { milestones: [], remark: '' }
   }
 }
 

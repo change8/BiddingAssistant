@@ -1,4 +1,4 @@
-"""High-level orchestration for running rule-based tender analysis jobs."""
+"""High-level orchestration for running LLM-based tender analysis jobs."""
 
 from __future__ import annotations
 
@@ -9,8 +9,7 @@ import uuid
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, Optional
 
-from ..analyzer.rules_engine import RulesEngine
-from ..analyzer.preprocess import preprocess_text
+from ..analyzer.tender_llm import TenderLLMAnalyzer
 from ..storage import AnalysisJobRecord, InMemoryJobStore
 from ..extractors.dispatcher import extract_text_from_file
 
@@ -27,8 +26,8 @@ class JobPayload:
 class AnalysisService:
     """Submit and execute analysis jobs with pluggable storage."""
 
-    def __init__(self, engine: RulesEngine, store: Optional[InMemoryJobStore] = None) -> None:
-        self.engine = engine
+    def __init__(self, analyzer: TenderLLMAnalyzer, store: Optional[InMemoryJobStore] = None) -> None:
+        self.analyzer = analyzer
         self.store = store or InMemoryJobStore()
 
     # ------------------------------------------------------------------ API
@@ -48,21 +47,20 @@ class AnalysisService:
         if not job:
             raise KeyError(f"Job {job_id} not found")
         metadata = metadata or {}
-        cleaned_text, preprocess_meta = preprocess_text(text)
-
         combined_metadata = dict(job.metadata)
         combined_metadata.update(metadata)
-        combined_metadata["preprocess"] = preprocess_meta
-
+        combined_metadata.pop("preprocess", None)
         self.store.update(
             job_id,
             status="processing",
             started_at=time.time(),
-            text_length=len(cleaned_text),
+            text_length=len(text),
             metadata=combined_metadata,
         )
         try:
-            result = self.engine.analyze(cleaned_text)
+            result = self.analyzer.analyze(text)
+            combined_metadata.update(result.pop("metadata", {}))
+            self.store.update(job_id, metadata=combined_metadata)
             self.store.update(job_id, status="completed", result=result, completed_at=time.time())
         except Exception as exc:  # pragma: no cover - defensive
             self.store.update(job_id, status="failed", error=str(exc), completed_at=time.time())
