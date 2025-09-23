@@ -13,22 +13,26 @@
     </header>
 
     <main class="layout">
-      <section class="panel">
-        <h2>上传文件或粘贴文本</h2>
-        <div class="input-group">
-          <label for="fileInput">选择标书文件（支持 PDF / DOCX / TXT）</label>
+      <section class="panel intake">
+        <h2>上传标书</h2>
+        <div class="upload-card">
           <input type="file" id="fileInput" accept=".pdf,.docx,.txt,.text,.md" />
+          <label for="fileInput" class="upload-btn">选择文件</label>
+          <p id="fileName" class="file-name">尚未选择文件</p>
+          <small>允许上传 PDF、Word、TXT 等文本文件，推荐文件大小 &lt; 30MB。</small>
         </div>
-        <div class="input-group">
-          <label for="textInput">或直接粘贴招标文本</label>
-          <textarea id="textInput" rows="12" placeholder="粘贴文本..."></textarea>
-        </div>
+
+        <details class="text-toggle">
+          <summary>或粘贴招标文本（辅助方式）</summary>
+          <textarea id="textInput" placeholder="直接粘贴招标正文，适用于临时补充或者快速测试场景"></textarea>
+        </details>
 
         <div class="actions">
           <button id="analyzeBtn">开始分析</button>
           <button id="clearBtn" class="secondary">清空</button>
         </div>
 
+        <div id="progress" class="progress hidden"><span class="spinner"></span><span id="progressText">处理中...</span></div>
         <div id="status" class="status hidden"></div>
       </section>
 

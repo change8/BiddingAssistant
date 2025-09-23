@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from difflib import SequenceMatcher
 from typing import Any, Dict, Iterable, List, Optional
 
@@ -13,6 +14,8 @@ except Exception:  # pragma: no cover - optional dependency
 
 from .framework import DEFAULT_FRAMEWORK, FrameworkCategory
 from .retrieval import HeuristicRetriever, TextSegment, split_text_into_segments
+
+logger = logging.getLogger(__name__)
 
 
 class LLMClient:
@@ -364,7 +367,7 @@ class LLMClient:
                     }
                 )
             result_categories.append({"id": cat.id, "title": cat.title, "items": items, "summary": cat.description})
-        return {"categories": result_categories, "timeline": {"milestones": [], "remark": ""}}
+        return {"categories": result_categories, "timeline": {"milestones": [], "remark": ""}, "raw_response": "heuristic"}
 
     def _call_openai_framework(
         self,
@@ -394,7 +397,9 @@ class LLMClient:
         response = requests.post(url, headers=headers, json=payload, timeout=self.timeout)
         response.raise_for_status()
         content = response.json()["choices"][0]["message"]["content"]
-        return self._parse_framework_response(content)
+        result = self._parse_framework_response(content)
+        result.setdefault("raw_response", content)
+        return result
 
     def _call_azure_framework(
         self,
@@ -424,7 +429,9 @@ class LLMClient:
         response = requests.post(url, headers=headers, json=payload, timeout=self.timeout)
         response.raise_for_status()
         content = response.json()["choices"][0]["message"]["content"]
-        return self._parse_framework_response(content)
+        result = self._parse_framework_response(content)
+        result.setdefault("raw_response", content)
+        return result
 
     def _build_framework_prompt(self, text: str, categories: List[FrameworkCategory]) -> str:
         framework = [
@@ -528,5 +535,6 @@ class LLMClient:
             else:
                 timeline = {"milestones": [], "remark": ""}
             return {"categories": normalized_categories, "timeline": timeline}
-        except Exception:
+        except Exception as exc:
+            logger.warning("Failed to parse framework response: %s", exc, exc_info=True)
             return {"categories": [], "timeline": {"milestones": [], "remark": ""}}
