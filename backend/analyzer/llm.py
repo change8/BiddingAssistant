@@ -501,7 +501,13 @@ class LLMClient:
             "Content-Type": "application/json",
         }
         try:
-        response = requests.post(url, headers=headers, json=payload, timeout=self.timeout, proxies=self._no_proxy)
+            response = requests.post(
+                url,
+                headers=headers,
+                json=payload,
+                timeout=self.timeout,
+                proxies=self._no_proxy,
+            )
             response.raise_for_status()
             content = response.json()["choices"][0]["message"]["content"]
             result = self._parse_framework_response(content)
