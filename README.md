@@ -72,13 +72,12 @@ retrieval:
   limit: 6
 ```
 
-> 如需接入 xAI Grok，请执行：
+> 建议方式：在项目根目录复制 `.env.example` 为 `.env` 并填写对应值，服务启动时会自动加载：
 > ```bash
-> export BIDDING_ASSISTANT_LLM_API_KEY="xai-..."
-> export BIDDING_ASSISTANT_LLM_PROVIDER=openai
-> export BIDDING_ASSISTANT_LLM_MODEL=grok-2-latest
-> export BIDDING_ASSISTANT_LLM_BASE_URL=https://api.x.ai/v1/chat/completions
+> cp .env.example .env
+> # 编辑 .env 文件，填入实际的 API key 和模型信息
 > ```
+> 若临时测试也可直接使用 `export BIDDING_ASSISTANT_LLM_API_KEY=...`。
 
 ### 本地 Ollama 模型接入
 

@@ -3,14 +3,35 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 try:
     import yaml  # type: ignore
 except Exception:  # pragma: no cover - optional dependency
     yaml = None
+
+try:  # pragma: no cover - optional dependency
+    from dotenv import load_dotenv  # type: ignore
+except Exception:  # pragma: no cover
+    load_dotenv = None  # type: ignore
+
+
+def _load_dotenv() -> None:
+    if load_dotenv is None:
+        return
+    project_root = Path(__file__).resolve().parent.parent
+    env_file = project_root / ".env"
+    if env_file.exists():
+        load_dotenv(env_file)
+    # Allow additional environment variables from current working directory .env
+    load_dotenv()
+
+
+_load_dotenv()
 
 
 @dataclass
@@ -91,6 +112,8 @@ def load_config(config_path: Optional[str] = None) -> AppConfig:
         embedding_model=retrieval_data.get("embedding_model"),
         limit=retrieval_data.get("limit", 6),
     )
+    if not llm_config.api_key or llm_config.api_key == "dummy":
+        logger.warning("LLM API key is not set. Falling back to dummy key; external LLM calls will fail.")
 
     return AppConfig(llm=llm_config, retrieval=retrieval_config)
 
@@ -103,4 +126,4 @@ def _load_file(path: str) -> Dict[str, Any]:
             return yaml.safe_load(f) or {}
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
-
+logger = logging.getLogger(__name__)
