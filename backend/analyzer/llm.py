@@ -38,6 +38,7 @@ class LLMClient:
         self.timeout = timeout
         self.options = kwargs
         self._heuristic = HeuristicRetriever()
+        self._no_proxy = {"http": None, "https": None}
 
     # ------------------------------------------------------------------ public
     def semantic_locate(
@@ -166,7 +167,7 @@ class LLMClient:
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
-        response = requests.post(url, headers=headers, json=payload, timeout=self.timeout)
+        response = requests.post(url, headers=headers, json=payload, timeout=self.timeout, proxies=self._no_proxy)
         response.raise_for_status()
         data = response.json()
         content = data["choices"][0]["message"]["content"]
@@ -197,7 +198,7 @@ class LLMClient:
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
-        response = requests.post(url, headers=headers, json=payload, timeout=self.timeout)
+        response = requests.post(url, headers=headers, json=payload, timeout=self.timeout, proxies=self._no_proxy)
         response.raise_for_status()
         data = response.json()
         content = data["choices"][0]["message"]["content"]
@@ -266,7 +267,7 @@ class LLMClient:
             "api-key": api_key,
             "Content-Type": "application/json",
         }
-        response = requests.post(url, headers=headers, json=payload, timeout=self.timeout)
+        response = requests.post(url, headers=headers, json=payload, timeout=self.timeout, proxies=self._no_proxy)
         response.raise_for_status()
         data = response.json()
         content = data["choices"][0]["message"]["content"]
@@ -325,7 +326,7 @@ class LLMClient:
             "Content-Type": "application/json",
         }
         try:
-            response = requests.post(url, headers=headers, json=payload, timeout=self.timeout)
+            response = requests.post(url, headers=headers, json=payload, timeout=self.timeout, proxies=self._no_proxy)
             response.raise_for_status()
             content = response.json()["choices"][0]["message"]["content"]
             parsed = self._parse_adaptive_response(content)
@@ -478,7 +479,7 @@ class LLMClient:
             "Content-Type": "application/json",
         }
         try:
-            response = requests.post(url, headers=headers, json=payload, timeout=self.timeout)
+        response = requests.post(url, headers=headers, json=payload, timeout=self.timeout, proxies=self._no_proxy)
             response.raise_for_status()
             content = response.json()["choices"][0]["message"]["content"]
             result = self._parse_framework_response(content)
@@ -517,7 +518,7 @@ class LLMClient:
             "Content-Type": "application/json",
         }
         try:
-            response = requests.post(url, headers=headers, json=payload, timeout=self.timeout)
+            response = requests.post(url, headers=headers, json=payload, timeout=self.timeout, proxies=self._no_proxy)
             response.raise_for_status()
             content = response.json()["choices"][0]["message"]["content"]
             result = self._parse_framework_response(content)
