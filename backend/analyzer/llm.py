@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import logging
 from difflib import SequenceMatcher
 from typing import Any, Dict, Iterable, List, Optional
 
@@ -15,8 +14,6 @@ except Exception:  # pragma: no cover - optional dependency
 
 from .framework import DEFAULT_FRAMEWORK, FrameworkCategory
 from .retrieval import HeuristicRetriever, TextSegment, split_text_into_segments
-
-logger = logging.getLogger(__name__)
 
 logger = logging.getLogger(__name__)
 
@@ -397,12 +394,19 @@ class LLMClient:
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
-        response = requests.post(url, headers=headers, json=payload, timeout=self.timeout)
-        response.raise_for_status()
-        content = response.json()["choices"][0]["message"]["content"]
-        result = self._parse_framework_response(content)
-        result.setdefault("raw_response", content)
-        return result
+        try:
+            response = requests.post(url, headers=headers, json=payload, timeout=self.timeout)
+            response.raise_for_status()
+            content = response.json()["choices"][0]["message"]["content"]
+            result = self._parse_framework_response(content)
+            result.setdefault("raw_response", content)
+            return result
+        except requests.HTTPError as exc:
+            body = exc.response.text if exc.response is not None else ""
+            logger.warning("LLM HTTPError (%s): %s", exc, body)
+            fallback = self._heuristic_framework(text, categories)
+            fallback.setdefault("raw_response", body)
+            return fallback
 
     def _call_azure_framework(
         self,
@@ -429,12 +433,19 @@ class LLMClient:
             "api-key": api_key,
             "Content-Type": "application/json",
         }
-        response = requests.post(url, headers=headers, json=payload, timeout=self.timeout)
-        response.raise_for_status()
-        content = response.json()["choices"][0]["message"]["content"]
-        result = self._parse_framework_response(content)
-        result.setdefault("raw_response", content)
-        return result
+        try:
+            response = requests.post(url, headers=headers, json=payload, timeout=self.timeout)
+            response.raise_for_status()
+            content = response.json()["choices"][0]["message"]["content"]
+            result = self._parse_framework_response(content)
+            result.setdefault("raw_response", content)
+            return result
+        except requests.HTTPError as exc:
+            body = exc.response.text if exc.response is not None else ""
+            logger.warning("Azure LLM HTTPError (%s): %s", exc, body)
+            fallback = self._heuristic_framework(text, categories)
+            fallback.setdefault("raw_response", body)
+            return fallback
 
     def _build_framework_prompt(self, text: str, categories: List[FrameworkCategory]) -> str:
         framework = [
