@@ -72,6 +72,14 @@ retrieval:
   limit: 6
 ```
 
+> 如需接入 xAI Grok，请执行：
+> ```bash
+> export BIDDING_ASSISTANT_LLM_API_KEY="xai-..."
+> export BIDDING_ASSISTANT_LLM_PROVIDER=openai
+> export BIDDING_ASSISTANT_LLM_MODEL=grok-2-latest
+> export BIDDING_ASSISTANT_LLM_BASE_URL=https://api.x.ai/v1/chat/completions
+> ```
+
 ### 本地 Ollama 模型接入
 
 1. 启动 Ollama 服务：`ollama serve`

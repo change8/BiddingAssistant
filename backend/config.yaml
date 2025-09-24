@@ -1,8 +1,8 @@
 llm:
   provider: openai
-  model: qwen2.5:7b
-  base_url: http://127.0.0.1:11434/v1/chat/completions
-  api_key: dummy
+  model: grok-2-latest
+  base_url: https://api.x.ai/v1/chat/completions
+  api_key: ${BIDDING_ASSISTANT_LLM_API_KEY:-dummy}
   timeout: 60
 retrieval:
   enable_heuristic: true
