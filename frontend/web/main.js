@@ -1,10 +1,10 @@
 const API_BASE = window.BIDDING_ASSISTANT_API || window.location.origin
 
-const severityStyles = {
-  critical: { text: '高风险', className: 'badge critical' },
-  high: { text: '较高风险', className: 'badge high' },
-  medium: { text: '中风险', className: 'badge medium' },
-  low: { text: '低风险', className: 'badge low' }
+const severityMap = {
+  critical: '高风险',
+  high: '较高风险',
+  medium: '中风险',
+  low: '低风险'
 }
 
 const els = {
@@ -17,9 +17,7 @@ const els = {
   progress: document.getElementById('progress'),
   progressText: document.getElementById('progressText'),
   summary: document.getElementById('summary'),
-  results: document.getElementById('results'),
-  catTemplate: document.getElementById('categoryTemplate'),
-  hitTemplate: document.getElementById('hitTemplate')
+  results: document.getElementById('results')
 }
 
 let pollTimer = null
@@ -56,78 +54,245 @@ function clearResults() {
   }
 }
 
-function renderSummary(summary = {}) {
+function renderSummary(text) {
   els.summary.innerHTML = ''
-  const entries = Object.entries(summary)
-  if (!entries.length) return
-  for (const [category, count] of entries) {
-    const tag = document.createElement('span')
-    tag.className = 'tag'
-    tag.textContent = `${category} · ${count}`
-    els.summary.appendChild(tag)
-  }
+  const div = document.createElement('div')
+  div.className = 'summary-text'
+  div.textContent = text || '模型未提供整体概述，可参考下方详细信息。'
+  els.summary.appendChild(div)
+}
+
+function appendCard(card) {
+  els.results.appendChild(card)
+}
+
+function createSectionCard(title) {
+  const card = document.createElement('div')
+  card.className = 'results-card'
+  const h3 = document.createElement('h3')
+  h3.textContent = title
+  card.appendChild(h3)
+  return card
+}
+
+function renderCriticalRequirements(data = []) {
+  if (!data.length) return
+  const card = createSectionCard('关键/强制要求')
+  data.forEach((group) => {
+    const wrapper = document.createElement('div')
+    wrapper.className = 'critical-category'
+    const h4 = document.createElement('h4')
+    h4.textContent = group.category || '分类'
+    wrapper.appendChild(h4)
+    (group.items || []).forEach((item) => {
+      const itemNode = document.createElement('div')
+      itemNode.className = 'critical-item'
+      const header = document.createElement('header')
+      const title = document.createElement('span')
+      title.textContent = item.title || '要点'
+      const severity = document.createElement('span')
+      const level = (item.severity || 'medium').toLowerCase()
+      severity.className = `severity-pill ${level}`
+      severity.textContent = severityMap[level] || level
+      header.appendChild(title)
+      header.appendChild(severity)
+      itemNode.appendChild(header)
+
+      if (item.description) {
+        const desc = document.createElement('div')
+        desc.textContent = item.description
+        itemNode.appendChild(desc)
+      }
+      if (item.impact) {
+        const impact = document.createElement('div')
+        impact.className = 'label'
+        impact.textContent = `影响：${item.impact}`
+        itemNode.appendChild(impact)
+      }
+      if (item.action_required) {
+        const action = document.createElement('div')
+        action.className = 'label'
+        action.textContent = `行动建议：${item.action_required}`
+        itemNode.appendChild(action)
+      }
+      if (item.evidence) {
+        const evidence = document.createElement('div')
+        evidence.className = 'evidence-box'
+        evidence.textContent = item.evidence
+        itemNode.appendChild(evidence)
+      }
+      wrapper.appendChild(itemNode)
+    })
+    card.appendChild(wrapper)
+  })
+  appendCard(card)
+}
+
+function renderCostFactors(data = []) {
+  if (!data.length) return
+  const card = createSectionCard('成本/商务影响')
+  const list = document.createElement('div')
+  list.className = 'list-grid'
+  data.forEach((item) => {
+    const node = document.createElement('div')
+    node.className = 'list-item'
+    const title = document.createElement('strong')
+    title.textContent = item.item || '成本因素'
+    node.appendChild(title)
+    if (item.description) {
+      const desc = document.createElement('div')
+      desc.textContent = item.description
+      node.appendChild(desc)
+    }
+    if (item.estimated_impact) {
+      const impact = document.createElement('div')
+      impact.className = 'label'
+      impact.textContent = `影响：${item.estimated_impact}`
+      node.appendChild(impact)
+    }
+    if (item.evidence) {
+      const evidence = document.createElement('div')
+      evidence.className = 'evidence-box'
+      evidence.textContent = item.evidence
+      node.appendChild(evidence)
+    }
+    list.appendChild(node)
+  })
+  card.appendChild(list)
+  appendCard(card)
+}
+
+function renderTimeline(data = []) {
+  if (!data.length) return
+  const card = createSectionCard('时间计划')
+  const list = document.createElement('ul')
+  list.className = 'timeline-list'
+  data.forEach((item) => {
+    const li = document.createElement('li')
+    li.className = 'timeline-entry'
+    const name = document.createElement('strong')
+    name.textContent = item.event || item.name || '关键节点'
+    li.appendChild(name)
+    const info = document.createElement('span')
+    info.textContent = `${item.deadline ? `截止：${item.deadline}` : ''}${item.importance ? ` · ${item.importance}` : ''}`
+    li.appendChild(info)
+    list.appendChild(li)
+  })
+  card.appendChild(list)
+  appendCard(card)
+}
+
+function renderRisks(data = []) {
+  if (!data.length) return
+  const card = createSectionCard('风险与应对')
+  const list = document.createElement('div')
+  list.className = 'list-grid'
+  data.forEach((item) => {
+    const node = document.createElement('div')
+    node.className = 'list-item'
+    const title = document.createElement('strong')
+    title.textContent = item.type || '风险'
+    node.appendChild(title)
+    if (item.description) {
+      const desc = document.createElement('div')
+      desc.textContent = item.description
+      node.appendChild(desc)
+    }
+    const meta = document.createElement('div')
+    meta.className = 'label'
+    meta.textContent = `可能性：${item.likelihood || 'unknown'} · 影响：${item.impact || 'unknown'}`
+    node.appendChild(meta)
+    if (item.mitigation) {
+      const mitigation = document.createElement('div')
+      mitigation.className = 'label'
+      mitigation.textContent = `应对：${item.mitigation}`
+      node.appendChild(mitigation)
+    }
+    list.appendChild(node)
+  })
+  card.appendChild(list)
+  appendCard(card)
+}
+
+function renderUnusualFindings(data = []) {
+  if (!data.length) return
+  const card = createSectionCard('特殊发现')
+  const list = document.createElement('div')
+  list.className = 'list-grid'
+  data.forEach((item) => {
+    const node = document.createElement('div')
+    node.className = 'list-item'
+    const title = document.createElement('strong')
+    title.textContent = item.title || '特殊点'
+    node.appendChild(title)
+    if (item.description) {
+      const desc = document.createElement('div')
+      desc.textContent = item.description
+      node.appendChild(desc)
+    }
+    if (item.concern) {
+      const concern = document.createElement('div')
+      concern.className = 'label'
+      concern.textContent = `关注点：${item.concern}`
+      node.appendChild(concern)
+    }
+    if (item.suggestion) {
+      const suggestion = document.createElement('div')
+      suggestion.className = 'label'
+      suggestion.textContent = `建议：${item.suggestion}`
+      node.appendChild(suggestion)
+    }
+    list.appendChild(node)
+  })
+  card.appendChild(list)
+  appendCard(card)
+}
+
+function renderClarifications(data = []) {
+  if (!data.length) return
+  const card = createSectionCard('澄清问题')
+  const list = document.createElement('div')
+  list.className = 'list-grid'
+  data.forEach((item) => {
+    const node = document.createElement('div')
+    node.className = 'list-item'
+    const title = document.createElement('strong')
+    title.textContent = item.issue || '问题'
+    node.appendChild(title)
+    if (item.context) {
+      const ctx = document.createElement('div')
+      ctx.textContent = item.context
+      node.appendChild(ctx)
+    }
+    if (item.suggested_question) {
+      const q = document.createElement('div')
+      q.className = 'label'
+      q.textContent = `建议提问：${item.suggested_question}`
+      node.appendChild(q)
+    }
+    list.appendChild(node)
+  })
+  card.appendChild(list)
+  appendCard(card)
 }
 
 function renderResults(result) {
   els.results.innerHTML = ''
-  if (!result || !result.categories) return
-  for (const [category, items] of Object.entries(result.categories)) {
-    const catNode = els.catTemplate.content.cloneNode(true)
-    const details = catNode.querySelector('details')
-    const summary = catNode.querySelector('summary')
-    const list = catNode.querySelector('.hit-list')
-    summary.textContent = `${category}（${items.length}）`
-
-    items.forEach((hit) => {
-      const hitNode = els.hitTemplate.content.cloneNode(true)
-      const title = hit.title || category
-      hitNode.querySelector('.rule').textContent = title
-
-      const badge = hitNode.querySelector('.severity')
-      const cfg = severityStyles[hit.severity] || severityStyles.medium
-      badge.textContent = cfg.text
-      badge.className = cfg.className
-
-      const summaryEl = hitNode.querySelector('.summary')
-      summaryEl.textContent = hit.summary || hit.description || ''
-      summaryEl.style.display = summaryEl.textContent ? 'block' : 'none'
-
-      const evidenceEl = hitNode.querySelector('.evidence')
-      evidenceEl.textContent = hit.evidence || ''
-      evidenceEl.style.display = hit.evidence ? 'block' : 'none'
-
-      const advice = hitNode.querySelector('.advice')
-      advice.textContent = hit.recommendation ? `建议：${hit.recommendation}` : ''
-      advice.style.display = hit.recommendation ? 'block' : 'none'
-
-      list.appendChild(hitNode)
-    })
-    els.results.appendChild(catNode)
+  if (!result) {
+    const span = document.createElement('span')
+    span.className = 'empty-hint'
+    span.textContent = '未获得分析结果。'
+    els.results.appendChild(span)
+    return
   }
 
-  if (result.timeline && (result.timeline.milestones || result.timeline.remark)) {
-    const timelineCard = document.createElement('div')
-    timelineCard.className = 'timeline-card'
-    const title = document.createElement('h3')
-    title.textContent = '时间计划'
-    timelineCard.appendChild(title)
-    const list = document.createElement('ul')
-    list.className = 'timeline-list'
-    ;(result.timeline.milestones || []).forEach((m) => {
-      const li = document.createElement('li')
-      li.textContent = `${m.name || '节点'}${m.deadline ? ' · 截止：' + m.deadline : ''}${
-        m.note ? ' · ' + m.note : ''
-      }`
-      list.appendChild(li)
-    })
-    if (list.childElementCount) timelineCard.appendChild(list)
-    if (result.timeline.remark) {
-      const remark = document.createElement('p')
-      remark.textContent = `备注：${result.timeline.remark}`
-      timelineCard.appendChild(remark)
-    }
-    els.results.appendChild(timelineCard)
-  }
+  renderSummary(result.summary)
+  renderCriticalRequirements(result.critical_requirements)
+  renderCostFactors(result.cost_factors)
+  renderTimeline(result.timeline)
+  renderRisks(result.risks)
+  renderUnusualFindings(result.unusual_findings)
+  renderClarifications(result.clarification_needed)
 }
 
 async function analyzeText(text) {
@@ -165,14 +330,12 @@ async function handleJobResponse(resp) {
     showProgress('模型分析中...')
     if (data.job_id) {
       pollJob(data.job_id)
-    }
-    if (!data.job_id) {
+    } else {
       els.analyze.disabled = false
     }
     return
   }
   const result = data.result || data
-  renderSummary(result.summary)
   renderResults(result)
   setStatus('分析完成 ✅')
   hideProgress()
@@ -188,9 +351,7 @@ async function pollJob(jobId) {
       if (data.status === 'completed') {
         clearTimeout(pollTimer)
         pollTimer = null
-        const result = data.result || {}
-        renderSummary(result.summary)
-        renderResults(result)
+        renderResults(data.result || {})
         setStatus('分析完成 ✅')
         hideProgress()
         els.analyze.disabled = false
@@ -224,8 +385,6 @@ els.analyze.addEventListener('click', async () => {
       setStatus(`正在处理：${file.name}`)
       await analyzeFile(file)
     } else if (text) {
-      showProgress('正在分析文本...')
-      els.analyze.disabled = true
       await analyzeText(text)
     } else {
       setStatus('请先上传文件或粘贴文本', 'error')

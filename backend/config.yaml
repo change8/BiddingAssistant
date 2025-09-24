@@ -1,6 +1,6 @@
 llm:
   provider: openai
-  model: grok-2-latest
+  model: grok-3
   base_url: https://api.x.ai/v1/chat/completions
   api_key: ${BIDDING_ASSISTANT_LLM_API_KEY:-dummy}
   timeout: 60

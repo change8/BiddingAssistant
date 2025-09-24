@@ -12,6 +12,7 @@ try:
 except Exception:  # pragma: no cover - optional dependency
     requests = None  # type: ignore
 
+from .adaptive_prompt import build_adaptive_prompt
 from .framework import DEFAULT_FRAMEWORK, FrameworkCategory
 from .retrieval import HeuristicRetriever, TextSegment, split_text_into_segments
 
@@ -83,6 +84,17 @@ class LLMClient:
             return self._call_openai_framework(text, selected)
         if provider in {"azure_openai", "azure"}:
             return self._call_azure_framework(text, selected)
+        raise NotImplementedError(f"LLM provider '{self.provider}' not implemented")
+
+    def analyze_adaptive(self, text: str) -> Dict[str, Any]:
+        system_prompt, user_prompt = build_adaptive_prompt(text)
+        provider = (self.provider or "stub").lower()
+        if provider in {"stub", "mock"}:
+            return self._heuristic_adaptive(text)
+        if provider in {"openai", "openai_compatible"}:
+            return self._call_openai_adaptive(system_prompt, user_prompt)
+        if provider in {"azure_openai", "azure"}:
+            return self._call_azure_adaptive(system_prompt, user_prompt)
         raise NotImplementedError(f"LLM provider '{self.provider}' not implemented")
 
     # ----------------------------------------------------------------- helpers
@@ -191,6 +203,42 @@ class LLMClient:
         content = data["choices"][0]["message"]["content"]
         return self._parse_summary_response(content)
 
+    def _call_openai_adaptive(self, system_prompt: str, user_prompt: str) -> Dict[str, Any]:
+        if requests is None:
+            raise RuntimeError("requests 库未安装，无法调用 OpenAI 接口")
+        api_key = self.api_key or self.options.get("api_key")
+        if not api_key:
+            raise RuntimeError("缺少 OpenAI API key")
+        url = self.base_url or "https://api.openai.com/v1/chat/completions"
+        model = self.model or self.options.get("model") or "gpt-4o-mini"
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": 0,
+            "stream": False,
+        }
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        try:
+            response = requests.post(url, headers=headers, json=payload, timeout=self.timeout)
+            response.raise_for_status()
+            data = response.json()
+            content = data["choices"][0]["message"]["content"]
+            parsed = self._parse_adaptive_response(content)
+            parsed.setdefault("raw_response", content)
+            return parsed
+        except requests.HTTPError as exc:
+            body = exc.response.text if exc.response is not None else ""
+            logger.warning("Adaptive LLM HTTPError (%s): %s", exc, body)
+            fallback = self._heuristic_adaptive(user_prompt)
+            fallback.setdefault("raw_response", body)
+            return fallback
+
     def _call_azure(
         self,
         text: str,
@@ -254,6 +302,41 @@ class LLMClient:
         data = response.json()
         content = data["choices"][0]["message"]["content"]
         return self._parse_summary_response(content)
+
+    def _call_azure_adaptive(self, system_prompt: str, user_prompt: str) -> Dict[str, Any]:
+        if requests is None:
+            raise RuntimeError("requests 库未安装，无法调用 Azure OpenAI 接口")
+        api_key = self.api_key or self.options.get("api_key") or self.options.get("key")
+        endpoint = self.base_url or self.options.get("endpoint")
+        deployment = self.options.get("deployment") or self.model
+        if not (api_key and endpoint and deployment):
+            raise RuntimeError("Azure OpenAI 配置缺失 (api_key / endpoint / deployment)")
+        url = f"{endpoint.rstrip('/')}/openai/deployments/{deployment}/chat/completions?api-version=2023-07-01-preview"
+        payload = {
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": 0,
+            "stream": False,
+        }
+        headers = {
+            "api-key": api_key,
+            "Content-Type": "application/json",
+        }
+        try:
+            response = requests.post(url, headers=headers, json=payload, timeout=self.timeout)
+            response.raise_for_status()
+            content = response.json()["choices"][0]["message"]["content"]
+            parsed = self._parse_adaptive_response(content)
+            parsed.setdefault("raw_response", content)
+            return parsed
+        except requests.HTTPError as exc:
+            body = exc.response.text if exc.response is not None else ""
+            logger.warning("Azure adaptive HTTPError (%s): %s", exc, body)
+            fallback = self._heuristic_adaptive(user_prompt)
+            fallback.setdefault("raw_response", body)
+            return fallback
 
     # ---------------------------------------------------------------- parsing
     def _build_semantic_prompt(
@@ -552,3 +635,49 @@ class LLMClient:
         except Exception as exc:
             logger.warning("Failed to parse framework response: %s", exc, exc_info=True)
             return {"categories": [], "timeline": {"milestones": [], "remark": ""}, "raw_response": content}
+
+    # ---------------------------------------------------------------- adaptive parsing
+    def _parse_adaptive_response(self, content: str) -> Dict[str, Any]:
+        try:
+            parsed = json.loads(content)
+            if not isinstance(parsed, dict):
+                return {"summary": "", "critical_requirements": [], "cost_factors": [], "timeline": [], "risks": [], "unusual_findings": [], "clarification_needed": []}
+            return {
+                "summary": parsed.get("summary") or "",
+                "critical_requirements": parsed.get("critical_requirements") or [],
+                "cost_factors": parsed.get("cost_factors") or [],
+                "timeline": parsed.get("timeline") or [],
+                "risks": parsed.get("risks") or [],
+                "unusual_findings": parsed.get("unusual_findings") or [],
+                "clarification_needed": parsed.get("clarification_needed") or [],
+            }
+        except Exception as exc:
+            logger.warning("Failed to parse adaptive response: %s", exc, exc_info=True)
+            return {"summary": "", "critical_requirements": [], "cost_factors": [], "timeline": [], "risks": [], "unusual_findings": [], "clarification_needed": []}
+
+    def _heuristic_adaptive(self, text: str) -> Dict[str, Any]:
+        snippet = text[:300]
+        return {
+            "summary": "自动摘要失败，以下为启发式抽取结果。",
+            "critical_requirements": [
+                {
+                    "category": "启发式",
+                    "items": [
+                        {
+                            "title": "可能的硬性要求",
+                            "description": snippet,
+                            "evidence": snippet,
+                            "impact": "请人工核实",
+                            "severity": "medium",
+                            "action_required": "人工复核招标原文",
+                        }
+                    ],
+                }
+            ],
+            "cost_factors": [],
+            "timeline": [],
+            "risks": [],
+            "unusual_findings": [],
+            "clarification_needed": [],
+            "raw_response": "heuristic",
+        }

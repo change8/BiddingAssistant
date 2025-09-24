@@ -8,35 +8,41 @@ const severityMap = {
 }
 
 function normalizeResult(result = {}) {
-  const categories = result.categories || {}
-  const normalized = {}
-  Object.keys(categories).forEach((cat) => {
-    normalized[cat] = (categories[cat] || []).map((item) => {
-      const severity = item.severity || 'medium'
-      return {
-        title: item.title || cat,
-        summary: item.summary || item.description || '',
-        evidence: item.evidence || '',
-        recommendation: item.recommendation || '',
-        severity,
-        severityLabel: severityMap[severity] || severityMap.medium
-      }
-    })
-  })
   return {
-    summary: result.summary || {},
-    categories: normalized,
-    timeline: result.timeline || { milestones: [], remark: '' }
+    summary: result.summary || '',
+    critical_requirements: (result.critical_requirements || []).map((group) => ({
+      category: group.category || '分类',
+      items: (group.items || []).map((item) => {
+        const severity = (item.severity || 'medium').toLowerCase()
+        return {
+          title: item.title || '要点',
+          description: item.description || '',
+          evidence: item.evidence || '',
+          impact: item.impact || '',
+          action: item.action_required || '',
+          severity,
+          severityLabel: severityMap[severity] || severityMap.medium
+        }
+      })
+    })),
+    cost_factors: result.cost_factors || [],
+    timeline: result.timeline || [],
+    risks: (result.risks || []).map((item) => ({
+      type: item.type || '风险',
+      description: item.description || '',
+      likelihood: item.likelihood || '',
+      impact: item.impact || '',
+      mitigation: item.mitigation || ''
+    })),
+    unusual_findings: result.unusual_findings || [],
+    clarification_needed: result.clarification_needed || []
   }
 }
 
 Page({
   data: {
     input: '',
-    result: null,
-    keys: [],
-    summary: {},
-    summaryKeys: [],
+    result: normalizeResult({}),
     jobId: null,
     status: '',
     loading: false
@@ -61,10 +67,7 @@ Page({
     this.setData({
       loading: true,
       status: '分析中...请稍候',
-      result: null,
-      keys: [],
-      summary: {},
-      summaryKeys: [],
+      result: normalizeResult({}),
       jobId: null
     })
 
@@ -88,17 +91,10 @@ Page({
     const status = job.status || ''
     if (status === 'completed' && job.result) {
       const normalized = normalizeResult(job.result)
-      const categories = normalized.categories || {}
-      const summary = normalized.summary || {}
-      const keys = Object.keys(categories)
-      const summaryKeys = Object.keys(summary)
       this.setData({
         loading: false,
         status: '分析完成',
         result: normalized,
-        keys,
-        summary,
-        summaryKeys,
         jobId: job.job_id || null
       })
       return
