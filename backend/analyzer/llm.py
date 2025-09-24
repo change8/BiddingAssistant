@@ -226,13 +226,24 @@ class LLMClient:
             "Content-Type": "application/json",
         }
         try:
-            response = requests.post(url, headers=headers, json=payload, timeout=self.timeout)
+            response = requests.post(
+                url,
+                headers=headers,
+                json=payload,
+                timeout=self.timeout,
+                proxies=self._no_proxy,
+            )
             response.raise_for_status()
             data = response.json()
             content = data["choices"][0]["message"]["content"]
             parsed = self._parse_adaptive_response(content)
             parsed.setdefault("raw_response", content)
             return parsed
+        except (requests.Timeout, requests.ReadTimeout) as exc:
+            logger.warning("Adaptive LLM timeout: %s", exc)
+            fallback = self._heuristic_adaptive(user_prompt)
+            fallback.setdefault("raw_response", "timeout")
+            return fallback
         except requests.HTTPError as exc:
             body = exc.response.text if exc.response is not None else ""
             logger.warning("Adaptive LLM HTTPError (%s): %s", exc, body)
@@ -298,7 +309,7 @@ class LLMClient:
             "api-key": api_key,
             "Content-Type": "application/json",
         }
-        response = requests.post(url, headers=headers, json=payload, timeout=self.timeout)
+        response = requests.post(url, headers=headers, json=payload, timeout=self.timeout, proxies=self._no_proxy)
         response.raise_for_status()
         data = response.json()
         content = data["choices"][0]["message"]["content"]
@@ -326,12 +337,23 @@ class LLMClient:
             "Content-Type": "application/json",
         }
         try:
-            response = requests.post(url, headers=headers, json=payload, timeout=self.timeout, proxies=self._no_proxy)
+            response = requests.post(
+                url,
+                headers=headers,
+                json=payload,
+                timeout=self.timeout,
+                proxies=self._no_proxy,
+            )
             response.raise_for_status()
             content = response.json()["choices"][0]["message"]["content"]
             parsed = self._parse_adaptive_response(content)
             parsed.setdefault("raw_response", content)
             return parsed
+        except (requests.Timeout, requests.ReadTimeout) as exc:
+            logger.warning("Azure adaptive timeout: %s", exc)
+            fallback = self._heuristic_adaptive(user_prompt)
+            fallback.setdefault("raw_response", "timeout")
+            return fallback
         except requests.HTTPError as exc:
             body = exc.response.text if exc.response is not None else ""
             logger.warning("Azure adaptive HTTPError (%s): %s", exc, body)
