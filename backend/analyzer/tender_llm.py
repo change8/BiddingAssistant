@@ -29,7 +29,7 @@ class TenderLLMAnalyzer:
         timeline = llm_result.get("timeline", {"milestones": [], "remark": ""})
 
         if not categories or all(not cat.get("items") for cat in categories if isinstance(cat, dict)):
-            fallback = self.llm.analyze_framework(cleaned, self.categories)
+            fallback = self.llm._heuristic_framework(cleaned, self.categories)
             categories = fallback.get("categories", categories)
             timeline = fallback.get("timeline", timeline)
             llm_result.setdefault("raw_response", fallback.get("raw_response"))

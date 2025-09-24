@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import logging
 from difflib import SequenceMatcher
 from typing import Any, Dict, Iterable, List, Optional
 
@@ -14,6 +15,8 @@ except Exception:  # pragma: no cover - optional dependency
 
 from .framework import DEFAULT_FRAMEWORK, FrameworkCategory
 from .retrieval import HeuristicRetriever, TextSegment, split_text_into_segments
+
+logger = logging.getLogger(__name__)
 
 logger = logging.getLogger(__name__)
 
@@ -464,7 +467,7 @@ class LLMClient:
         try:
             parsed = json.loads(content)
             if not isinstance(parsed, dict):
-                return {}
+                return {"categories": [], "timeline": {"milestones": [], "remark": ""}, "raw_response": content}
             categories = parsed.get("categories") or []
             timeline = parsed.get("timeline") or {}
             if not isinstance(categories, list):
@@ -534,7 +537,7 @@ class LLMClient:
                 }
             else:
                 timeline = {"milestones": [], "remark": ""}
-            return {"categories": normalized_categories, "timeline": timeline}
+            return {"categories": normalized_categories, "timeline": timeline, "raw_response": content}
         except Exception as exc:
             logger.warning("Failed to parse framework response: %s", exc, exc_info=True)
-            return {"categories": [], "timeline": {"milestones": [], "remark": ""}}
+            return {"categories": [], "timeline": {"milestones": [], "remark": ""}, "raw_response": content}
