@@ -1,51 +1,113 @@
 const { API_BASE } = require('../../utils/config')
 
-const severityMap = {
-  critical: '高风险',
-  high: '较高风险',
-  medium: '中风险',
-  low: '低风险'
+const TAB_DEFS = [
+  { id: 'hard_requirements', title: '废标项/硬性要求' },
+  { id: 'scoring_items', title: '评分项' },
+  { id: 'submission_format', title: '投标形式' },
+  { id: 'technical_requirements', title: '技术要求' },
+  { id: 'cost_items', title: '成本项' },
+  { id: 'bid_timeline', title: '投标日历' }
+]
+
+const PRIORITY_LABELS = {
+  critical: '极高优先级',
+  high: '高优先级',
+  medium: '中优先级',
+  low: '关注即可'
 }
 
-function normalizeResult(result = {}) {
+function normaliseItem(raw = {}) {
+  const priority = String(raw.priority || 'medium').toLowerCase()
+  const level = ['critical', 'high', 'medium', 'low'].includes(priority) ? priority : 'medium'
+  const startVal = Number(raw.source_start)
+  const endVal = Number(raw.source_end)
+  return {
+    title: raw.title || raw.milestone || raw.event || '要点',
+    why_important: raw.why_important || raw.reason || raw.summary || '',
+    guidance: raw.guidance || raw.action || raw.recommendation || '',
+    details: raw.details || raw.notes || raw.impact || '',
+    milestone: raw.milestone || '',
+    date: raw.date || raw.deadline || '',
+    source_excerpt: raw.source_excerpt || '',
+    source_start: Number.isFinite(startVal) ? startVal : null,
+    source_end: Number.isFinite(endVal) ? endVal : null,
+    priority: level,
+    priorityLabel: PRIORITY_LABELS[level]
+  }
+}
+
+function normaliseResult(result = {}) {
+  const incoming = {}
+  if (Array.isArray(result.tabs)) {
+    result.tabs.forEach((tab) => {
+      if (tab && tab.id) incoming[tab.id] = tab
+    })
+  }
+  const tabs = TAB_DEFS.map((def) => {
+    const source = incoming[def.id] || {}
+    const items = Array.isArray(source.items) ? source.items.map(normaliseItem) : []
+    return {
+      id: def.id,
+      title: source.title || def.title,
+      items
+    }
+  })
   return {
     summary: result.summary || '',
-    critical_requirements: (result.critical_requirements || []).map((group) => ({
-      category: group.category || '分类',
-      items: (group.items || []).map((item) => {
-        const severity = (item.severity || 'medium').toLowerCase()
-        return {
-          title: item.title || '要点',
-          description: item.description || '',
-          evidence: item.evidence || '',
-          impact: item.impact || '',
-          action: item.action_required || '',
-          severity,
-          severityLabel: severityMap[severity] || severityMap.medium
-        }
-      })
-    })),
-    cost_factors: result.cost_factors || [],
-    timeline: result.timeline || [],
-    risks: (result.risks || []).map((item) => ({
-      type: item.type || '风险',
-      description: item.description || '',
-      likelihood: item.likelihood || '',
-      impact: item.impact || '',
-      mitigation: item.mitigation || ''
-    })),
-    unusual_findings: result.unusual_findings || [],
-    clarification_needed: result.clarification_needed || []
+    tabs
   }
+}
+
+function findDefaultTab(tabs = []) {
+  const withItems = tabs.find((tab) => (tab.items || []).length)
+  return (withItems || tabs[0] || {}).id || ''
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function highlightContext(context = '', excerpt = '') {
+  if (!excerpt) {
+    return escapeHtml(context)
+  }
+  let index = context.indexOf(excerpt)
+  let match = excerpt
+  if (index === -1) {
+    const trimmed = excerpt.trim()
+    if (trimmed) {
+      index = context.indexOf(trimmed)
+      match = trimmed
+    }
+  }
+  if (index === -1) {
+    return `${escapeHtml(context)}\n\n（未能精确定位摘录，已显示上下文）`
+  }
+  const before = escapeHtml(context.slice(0, index))
+  const middle = escapeHtml(context.slice(index, index + match.length))
+  const after = escapeHtml(context.slice(index + match.length))
+  return `${before}<mark>${middle}</mark>${after}`
 }
 
 Page({
   data: {
     input: '',
-    result: normalizeResult({}),
+    result: normaliseResult({}),
     jobId: null,
     status: '',
-    loading: false
+    loading: false,
+    activeTabId: 'hard_requirements',
+    currentItems: [],
+    hasSource: false,
+    snippetVisible: false,
+    snippetTitle: '',
+    snippetMeta: '',
+    snippetContent: ''
   },
   onInput(e) {
     this.setData({ input: e.detail.value })
@@ -67,8 +129,11 @@ Page({
     this.setData({
       loading: true,
       status: '分析中...请稍候',
-      result: normalizeResult({}),
-      jobId: null
+      result: normaliseResult({}),
+      jobId: null,
+      hasSource: false,
+      activeTabId: 'hard_requirements',
+      currentItems: []
     })
 
     wx.request({
@@ -90,12 +155,17 @@ Page({
   _handleJob(job) {
     const status = job.status || ''
     if (status === 'completed' && job.result) {
-      const normalized = normalizeResult(job.result)
+      const normalized = normaliseResult(job.result)
+      const activeId = findDefaultTab(normalized.tabs)
       this.setData({
         loading: false,
         status: '分析完成',
         result: normalized,
-        jobId: job.job_id || null
+        jobId: job.job_id || null,
+        hasSource: !!job.has_source_text,
+        activeTabId: activeId || 'hard_requirements'
+      }, () => {
+        this.updateCurrentItems()
       })
       return
     }
@@ -127,5 +197,66 @@ Page({
         }
       })
     }, 1500)
+  },
+  updateCurrentItems() {
+    const tabs = this.data.result.tabs || []
+    const target = tabs.find((tab) => tab.id === this.data.activeTabId) || tabs[0] || { items: [] }
+    const enriched = (target.items || []).map((item, index) => ({ ...item, _index: index }))
+    this.setData({ currentItems: enriched })
+  },
+  onSwitchTab(e) {
+    const id = e.currentTarget.dataset.id
+    if (!id || id === this.data.activeTabId) return
+    this.setData({ activeTabId: id }, () => {
+      this.updateCurrentItems()
+    })
+  },
+  onViewSource(e) {
+    if (!this.data.hasSource || !this.data.jobId) {
+      wx.showToast({ title: '原文暂不可用', icon: 'none' })
+      return
+    }
+    const tabId = e.currentTarget.dataset.tab
+    const index = Number(e.currentTarget.dataset.index)
+    const tabs = this.data.result.tabs || []
+    const tab = tabs.find((t) => t.id === tabId)
+    if (!tab) return
+    const item = (tab.items || [])[index]
+    if (!item || item.source_start === null || item.source_start === undefined) {
+      wx.showToast({ title: '缺少原文索引', icon: 'none' })
+      return
+    }
+    const start = Number(item.source_start) || 0
+    let end
+    if (item.source_end !== null && item.source_end !== undefined) {
+      end = Number(item.source_end)
+    } else if (item.source_excerpt) {
+      end = start + item.source_excerpt.length
+    } else {
+      end = start + 1
+    }
+    if (end <= start) end = start + 1
+
+    wx.request({
+      url: `${API_BASE}/jobs/${this.data.jobId}/source`,
+      method: 'GET',
+      data: { start, end, window: 200 },
+      success: ({ data }) => {
+        const excerpt = data.excerpt || item.source_excerpt || ''
+        const context = data.context || excerpt
+        this.setData({
+          snippetVisible: true,
+          snippetTitle: `${tab.title} · ${item.title}`,
+          snippetMeta: `原文范围：${data.start} - ${data.end} ／ 全文 ${data.length} 字`,
+          snippetContent: highlightContext(context, excerpt)
+        })
+      },
+      fail: () => {
+        wx.showToast({ title: '原文获取失败', icon: 'none' })
+      }
+    })
+  },
+  onCloseSnippet() {
+    this.setData({ snippetVisible: false, snippetContent: '' })
   }
 })

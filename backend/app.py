@@ -130,6 +130,19 @@ def create_app(rules_path: str = None, config_path: str = None):  # type: ignore
         except KeyError:
             raise HTTPException(status_code=404, detail="job 不存在")
 
+    @app.get("/jobs/{job_id}/source")
+    def get_job_source(
+        job_id: str,
+        start: int = Query(..., ge=0, description="原文字符起始位置"),
+        end: Optional[int] = Query(None, description="原文字符结束位置（可选）"),
+        window: int = Query(120, ge=0, le=2000, description="上下文窗口大小"),
+    ):
+        try:
+            payload = service.get_source_snippet(job_id, start=start, end=end, window=window)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="job 不存在或未保留原文")
+        return JSONResponse(payload)
+
     @app.get("/jobs")
     def list_jobs():
         return JSONResponse(service.list_jobs())

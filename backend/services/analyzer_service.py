@@ -56,6 +56,7 @@ class AnalysisService:
             started_at=time.time(),
             text_length=len(text),
             metadata=combined_metadata,
+            source_text=text,
         )
         try:
             result = self.analyzer.analyze(text)
@@ -139,10 +140,40 @@ class AnalysisService:
             "completed_at": job.completed_at,
             "metadata": job.metadata,
             "error": job.error,
+            "has_source_text": bool(job.source_text),
         }
         if include_result and job.result is not None:
             payload["result"] = job.result
         return payload
+
+    def get_source_snippet(self, job_id: str, start: int, end: Optional[int] = None, window: int = 120) -> Dict[str, Any]:
+        job = self.store.get(job_id)
+        if not job or job.source_text is None:
+            raise KeyError(job_id)
+        text = job.source_text
+        length = len(text)
+        if length == 0:
+            return {"job_id": job_id, "start": 0, "end": 0, "excerpt": "", "context": "", "length": 0}
+
+        start = max(0, min(length, int(start)))
+        if end is None:
+            end = start + 1
+        end = max(start, min(length, int(end)))
+        window = max(0, int(window))
+        excerpt = text[start:end]
+        context_start = max(0, start - window)
+        context_end = min(length, end + window)
+        context = text[context_start:context_end]
+        return {
+            "job_id": job_id,
+            "start": start,
+            "end": end,
+            "excerpt": excerpt,
+            "context": context,
+            "context_start": context_start,
+            "context_end": context_end,
+            "length": length,
+        }
 
 
 def background_runner(background_tasks, func, *args, **kwargs):

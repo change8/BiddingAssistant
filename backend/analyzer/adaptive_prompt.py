@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing import Tuple
+from typing import Any, Dict, List
+
+MAX_CHARS_PER_CHUNK = 6000
 
 DOCUMENT_KEYWORDS = {
     "IT系统": ["软件", "系统", "开发", "运维", "信息化", "数据库", "平台", "接口"],
@@ -46,7 +48,26 @@ def generate_dynamic_examples(text: str) -> str:
     return examples_map.get(doc_type, "")
 
 
-def build_adaptive_prompt(text: str) -> Tuple[str, str]:
+def _chunk_text(text: str, max_chars: int = MAX_CHARS_PER_CHUNK) -> List[Dict[str, Any]]:
+    chunks: List[Dict[str, Any]] = []
+    total = len(text)
+    cursor = 0
+    index = 1
+    while cursor < total:
+        end = min(total, cursor + max_chars)
+        if end < total:
+            # try to break on newline to keep语义完整
+            newline = text.rfind("\n", cursor, end)
+            if newline > cursor + max_chars // 2:
+                end = newline
+        segment = text[cursor:end]
+        chunks.append({"index": index, "start": cursor, "end": end, "content": segment})
+        cursor = end
+        index += 1
+    return chunks
+
+
+def build_adaptive_prompt(text: str, max_chars: int = MAX_CHARS_PER_CHUNK) -> Dict[str, Any]:
     system_prompt = (
         "你是一位经验丰富的招标文件分析专家。\n"
         "你的任务是全面识别招标文件中所有可能影响投标成功的关键信息。\n"
@@ -138,84 +159,104 @@ def build_adaptive_prompt(text: str) -> Tuple[str, str]:
 
     dynamic_examples = generate_dynamic_examples(text)
 
-    full_prompt = f"""
+    chunk_messages: List[Dict[str, str]] = []
+    for chunk in _chunk_text(text, max_chars=max_chars):
+        content = (
+            f"### 文档片段 {chunk['index']}（字符 {chunk['start']} - {chunk['end']}）\n"
+            f"请阅读并记住该片段内容，后续回答需要引用对应的字符位置。\n"
+            f"{chunk['content']}"
+        )
+        chunk_messages.append({"role": "user", "content": content})
+
+    schema_instruction = """
+## 输出结构要求
+请输出能被严格解析的 JSON（不得包含注释、Markdown、额外说明），结构如下：
+{
+  "summary": "面向投标团队的总览提醒（不超过180字）",
+  "tabs": [
+    {
+      "id": "hard_requirements",
+      "title": "废标项/硬性要求",
+      "items": [
+        {
+          "title": "要点标题",
+          "why_important": "重点提示，帮助读者理解这条为何关键（不超过120字）",
+          "guidance": "建议采取的行动或思考方向（不超过100字）",
+          "priority": "critical|high|medium|low",
+          "source_excerpt": "原文摘录（<=200字，保持原语序）",
+          "source_start": 整数（对应原文字符起始位置）
+          "source_end": 整数（对应原文字符结束位置，开区间）
+        }
+      ]
+    },
+    {
+      "id": "scoring_items",
+      "title": "评分项",
+      "items": [ { 同上字段要求 } ]
+    },
+    {
+      "id": "submission_format",
+      "title": "投标形式",
+      "items": [ { 同上字段要求，可聚焦报名、递交方式、份数、盖章等 } ]
+    },
+    {
+      "id": "technical_requirements",
+      "title": "技术要求",
+      "items": [ { 同上字段要求 } ]
+    },
+    {
+      "id": "cost_items",
+      "title": "成本项",
+      "items": [ { 同上字段要求，可突出付款条件、押金、质保、隐性成本 } ]
+    },
+    {
+      "id": "bid_timeline",
+      "title": "投标日历",
+      "items": [
+        {
+          "title": "关键节点",
+          "milestone": "事件描述",
+          "date": "日期或截止时间",
+          "guidance": "提醒或行动建议",
+          "source_excerpt": "原文摘录（<=200字）",
+          "source_start": 整数,
+          "source_end": 整数
+        }
+      ]
+    }
+  ]
+}
+
+补充要求：
+- 六个 tab 必须全部输出，若无相关内容，items 为 []。
+- 每个 tab 建议筛选 3-6 条高价值要点（投标日历可多于 6 条）。
+- "source_start" 与 "source_end" 必须依据上方片段提供的字符索引，确保可定位原文。
+- "source_excerpt" 需与对应区段一致，以便核对。
+- 若原文存在时间或数字，保留原格式；不要臆造信息。
+- 输出仅包含 JSON 字面量，不得加入 Markdown、注释或额外文字。
+"""
+
+    final_instruction = """
+基于全部片段，完成结构化输出，特别注意显性废标项、硬性要求以及影响评标和交付的关键信息。若发现相互矛盾、待澄清、潜在风险的条款，请在相应 tab 的 items 中给出明确提示并提供行动建议。
+"""
+
+    prelude_message = {
+        "role": "user",
+        "content": f"""
 {open_analysis_instruction}
 
 {two_stage_prompt}
 
 {dynamic_examples}
 
-## 待分析的招标文件
-{text[:40000]}
+请通读全部片段，严格按照下述 JSON 结构返回结果。不要提前输出。\n\n{schema_instruction}
+""".strip(),
+    }
 
-## 输出要求
-请返回 JSON，确保能被严格解析：
-{{
-    "summary": "整体情况概述，包括项目特点和主要挑战",
-    "critical_requirements": [
-        {{
-            "category": "分类名称（可以自定义）",
-            "items": [
-                {{
-                    "title": "简明标题",
-                    "description": "详细说明",
-                    "evidence": "原文依据",
-                    "impact": "对投标的影响",
-                    "severity": "critical/high/medium/low",
-                    "action_required": "需要采取的行动"
-                }}
-            ]
-        }}
-    ],
-    "cost_factors": [
-        {{
-            "item": "成本项",
-            "description": "说明",
-            "estimated_impact": "预估影响",
-            "evidence": "原文依据"
-        }}
-    ],
-    "timeline": [
-        {{
-            "event": "事件",
-            "deadline": "时间",
-            "importance": "重要性说明"
-        }}
-    ],
-    "risks": [
-        {{
-            "type": "风险类型（不限于预定义类型）",
-            "description": "风险描述",
-            "likelihood": "high/medium/low",
-            "impact": "critical/high/medium/low",
-            "mitigation": "建议的应对措施"
-        }}
-    ],
-    "unusual_findings": [
-        {{
-            "title": "特殊发现",
-            "description": "说明",
-            "concern": "为什么值得关注",
-            "suggestion": "建议"
-        }}
-    ],
-    "clarification_needed": [
-        {{
-            "issue": "需要澄清的问题",
-            "context": "相关背景",
-            "suggested_question": "建议在答疑时提出的问题"
-        }}
-    ]
-}}
+    analysis_request = {"role": "user", "content": final_instruction.strip()}
 
-只使用 JSON 字面量，不要输出多余文字或 markdown。
+    messages = [prelude_message]
+    messages.extend(chunk_messages)
+    messages.append(analysis_request)
 
-## 最后检查
-完成分析后，请自问：
-1. 是否发现了所有强制性要求？
-2. 是否识别了所有潜在风险（包括隐性的）？
-3. 是否注意到了任何异常或值得警惕的地方？
-4. 投标团队看到这份分析后，是否能避免所有可能的失误？
-"""
-
-    return system_prompt, full_prompt
+    return {"system": system_prompt, "messages": messages, "raw_text": text}

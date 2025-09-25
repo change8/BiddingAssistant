@@ -18,6 +18,15 @@ from .retrieval import HeuristicRetriever, TextSegment, split_text_into_segments
 
 logger = logging.getLogger(__name__)
 
+ADAPTIVE_TAB_SPECS = [
+    ("hard_requirements", "废标项/硬性要求"),
+    ("scoring_items", "评分项"),
+    ("submission_format", "投标形式"),
+    ("technical_requirements", "技术要求"),
+    ("cost_items", "成本项"),
+    ("bid_timeline", "投标日历"),
+]
+
 
 class LLMClient:
     """Wrapper around different LLM providers for semantic tasks."""
@@ -88,14 +97,14 @@ class LLMClient:
         raise NotImplementedError(f"LLM provider '{self.provider}' not implemented")
 
     def analyze_adaptive(self, text: str) -> Dict[str, Any]:
-        system_prompt, user_prompt = build_adaptive_prompt(text)
+        prompt_payload = build_adaptive_prompt(text)
         provider = (self.provider or "stub").lower()
         if provider in {"stub", "mock"}:
             return self._heuristic_adaptive(text)
         if provider in {"openai", "openai_compatible"}:
-            return self._call_openai_adaptive(system_prompt, user_prompt)
+            return self._call_openai_adaptive(prompt_payload)
         if provider in {"azure_openai", "azure"}:
-            return self._call_azure_adaptive(system_prompt, user_prompt)
+            return self._call_azure_adaptive(prompt_payload)
         raise NotImplementedError(f"LLM provider '{self.provider}' not implemented")
 
     # ----------------------------------------------------------------- helpers
@@ -204,7 +213,7 @@ class LLMClient:
         content = data["choices"][0]["message"]["content"]
         return self._parse_summary_response(content)
 
-    def _call_openai_adaptive(self, system_prompt: str, user_prompt: str) -> Dict[str, Any]:
+    def _call_openai_adaptive(self, prompt_payload: Dict[str, Any]) -> Dict[str, Any]:
         if requests is None:
             raise RuntimeError("requests 库未安装，无法调用 OpenAI 接口")
         api_key = self.api_key or self.options.get("api_key")
@@ -212,12 +221,15 @@ class LLMClient:
             raise RuntimeError("缺少 OpenAI API key")
         url = self.base_url or "https://api.openai.com/v1/chat/completions"
         model = self.model or self.options.get("model") or "gpt-4o-mini"
+        system_prompt = prompt_payload.get("system")
+        messages = prompt_payload.get("messages") or []
+        assembled_messages: List[Dict[str, Any]] = []
+        if system_prompt:
+            assembled_messages.append({"role": "system", "content": system_prompt})
+        assembled_messages.extend(messages)
         payload = {
             "model": model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
+            "messages": assembled_messages,
             "temperature": 0,
             "stream": False,
         }
@@ -241,13 +253,13 @@ class LLMClient:
             return parsed
         except (requests.Timeout, requests.ReadTimeout) as exc:
             logger.warning("Adaptive LLM timeout: %s", exc)
-            fallback = self._heuristic_adaptive(user_prompt)
+            fallback = self._heuristic_adaptive(prompt_payload.get("raw_text", ""))
             fallback.setdefault("raw_response", "timeout")
             return fallback
         except requests.HTTPError as exc:
             body = exc.response.text if exc.response is not None else ""
             logger.warning("Adaptive LLM HTTPError (%s): %s", exc, body)
-            fallback = self._heuristic_adaptive(user_prompt)
+            fallback = self._heuristic_adaptive(prompt_payload.get("raw_text", ""))
             fallback.setdefault("raw_response", body)
             return fallback
 
@@ -315,7 +327,7 @@ class LLMClient:
         content = data["choices"][0]["message"]["content"]
         return self._parse_summary_response(content)
 
-    def _call_azure_adaptive(self, system_prompt: str, user_prompt: str) -> Dict[str, Any]:
+    def _call_azure_adaptive(self, prompt_payload: Dict[str, Any]) -> Dict[str, Any]:
         if requests is None:
             raise RuntimeError("requests 库未安装，无法调用 Azure OpenAI 接口")
         api_key = self.api_key or self.options.get("api_key") or self.options.get("key")
@@ -324,11 +336,14 @@ class LLMClient:
         if not (api_key and endpoint and deployment):
             raise RuntimeError("Azure OpenAI 配置缺失 (api_key / endpoint / deployment)")
         url = f"{endpoint.rstrip('/')}/openai/deployments/{deployment}/chat/completions?api-version=2023-07-01-preview"
+        system_prompt = prompt_payload.get("system")
+        messages = prompt_payload.get("messages") or []
+        assembled_messages: List[Dict[str, Any]] = []
+        if system_prompt:
+            assembled_messages.append({"role": "system", "content": system_prompt})
+        assembled_messages.extend(messages)
         payload = {
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
+            "messages": assembled_messages,
             "temperature": 0,
             "stream": False,
         }
@@ -351,13 +366,13 @@ class LLMClient:
             return parsed
         except (requests.Timeout, requests.ReadTimeout) as exc:
             logger.warning("Azure adaptive timeout: %s", exc)
-            fallback = self._heuristic_adaptive(user_prompt)
+            fallback = self._heuristic_adaptive(prompt_payload.get("raw_text", ""))
             fallback.setdefault("raw_response", "timeout")
             return fallback
         except requests.HTTPError as exc:
             body = exc.response.text if exc.response is not None else ""
             logger.warning("Azure adaptive HTTPError (%s): %s", exc, body)
-            fallback = self._heuristic_adaptive(user_prompt)
+            fallback = self._heuristic_adaptive(prompt_payload.get("raw_text", ""))
             fallback.setdefault("raw_response", body)
             return fallback
 
@@ -455,6 +470,66 @@ class LLMClient:
             return {"summary": summary, "items": normalized}
         except Exception:
             return {}
+
+    def _default_adaptive_tabs(self) -> List[Dict[str, Any]]:
+        return [{"id": tab_id, "title": title, "items": []} for tab_id, title in ADAPTIVE_TAB_SPECS]
+
+    def _normalise_adaptive_items(self, value: Any) -> List[Dict[str, Any]]:
+        if isinstance(value, list):
+            iterable = value
+        elif isinstance(value, dict):
+            iterable = [value]
+        else:
+            return []
+        items: List[Dict[str, Any]] = []
+        for item in iterable:
+            if not isinstance(item, dict):
+                continue
+            normalised: Dict[str, Any] = {}
+            for key, val in item.items():
+                if key in {"source_start", "source_end"}:
+                    try:
+                        normalised[key] = int(val)
+                    except (ValueError, TypeError):
+                        continue
+                else:
+                    normalised[key] = val
+            items.append(normalised)
+        return items
+
+    def _normalise_adaptive_tabs(self, tabs: Any) -> List[Dict[str, Any]]:
+        defaults: Dict[str, Dict[str, Any]] = {tab_id: {"id": tab_id, "title": title, "items": []} for tab_id, title in ADAPTIVE_TAB_SPECS}
+        if isinstance(tabs, dict):
+            iterable = tabs.values()
+        elif isinstance(tabs, list):
+            iterable = tabs
+        else:
+            iterable = []
+        for tab in iterable:
+            if not isinstance(tab, dict):
+                continue
+            tab_id = str(tab.get("id") or tab.get("key") or "").strip()
+            if tab_id and tab_id in defaults:
+                entry = defaults[tab_id]
+                title = tab.get("title")
+                if isinstance(title, str) and title.strip():
+                    entry["title"] = title.strip()
+                entry["items"] = self._normalise_adaptive_items(tab.get("items"))
+        return [defaults[tab_id] for tab_id, _ in ADAPTIVE_TAB_SPECS]
+
+    def _parse_adaptive_response(self, content: str) -> Dict[str, Any]:
+        if not content or not str(content).strip():
+            return {"summary": "", "tabs": self._default_adaptive_tabs()}
+        try:
+            parsed = json.loads(content)
+            if not isinstance(parsed, dict):
+                return {"summary": "", "tabs": self._default_adaptive_tabs()}
+            summary = str(parsed.get("summary") or "").strip()
+            tabs = self._normalise_adaptive_tabs(parsed.get("tabs"))
+            return {"summary": summary, "tabs": tabs}
+        except Exception as exc:
+            logger.warning("Failed to parse adaptive response: %s", exc, exc_info=True)
+            return {"summary": "", "tabs": self._default_adaptive_tabs()}
 
     def _heuristic_framework(self, text: str, categories: List[FrameworkCategory]) -> Dict[str, Any]:
         segments = split_text_into_segments(text, max_chars=800)
@@ -665,48 +740,23 @@ class LLMClient:
             logger.warning("Failed to parse framework response: %s", exc, exc_info=True)
             return {"categories": [], "timeline": {"milestones": [], "remark": ""}, "raw_response": content}
 
-    # ---------------------------------------------------------------- adaptive parsing
-    def _parse_adaptive_response(self, content: str) -> Dict[str, Any]:
-        try:
-            parsed = json.loads(content)
-            if not isinstance(parsed, dict):
-                return {"summary": "", "critical_requirements": [], "cost_factors": [], "timeline": [], "risks": [], "unusual_findings": [], "clarification_needed": []}
-            return {
-                "summary": parsed.get("summary") or "",
-                "critical_requirements": parsed.get("critical_requirements") or [],
-                "cost_factors": parsed.get("cost_factors") or [],
-                "timeline": parsed.get("timeline") or [],
-                "risks": parsed.get("risks") or [],
-                "unusual_findings": parsed.get("unusual_findings") or [],
-                "clarification_needed": parsed.get("clarification_needed") or [],
-            }
-        except Exception as exc:
-            logger.warning("Failed to parse adaptive response: %s", exc, exc_info=True)
-            return {"summary": "", "critical_requirements": [], "cost_factors": [], "timeline": [], "risks": [], "unusual_findings": [], "clarification_needed": []}
-
     def _heuristic_adaptive(self, text: str) -> Dict[str, Any]:
-        snippet = text[:300]
-        return {
-            "summary": "自动摘要失败，以下为启发式抽取结果。",
-            "critical_requirements": [
-                {
-                    "category": "启发式",
-                    "items": [
-                        {
-                            "title": "可能的硬性要求",
-                            "description": snippet,
-                            "evidence": snippet,
-                            "impact": "请人工核实",
-                            "severity": "medium",
-                            "action_required": "人工复核招标原文",
-                        }
-                    ],
-                }
-            ],
-            "cost_factors": [],
-            "timeline": [],
-            "risks": [],
-            "unusual_findings": [],
-            "clarification_needed": [],
-            "raw_response": "heuristic",
-        }
+        snippet = (text or "")[:200].strip()
+        total_len = len(text or "")
+        tabs: List[Dict[str, Any]] = []
+        for tab_id, title in ADAPTIVE_TAB_SPECS:
+            items: List[Dict[str, Any]] = []
+            if snippet and tab_id == "hard_requirements":
+                items.append(
+                    {
+                        "title": "请人工核对硬性要求",
+                        "why_important": "自动分析失败，启发式仅提供原文开头片段，请人工核查是否存在废标风险。",
+                        "guidance": "逐条核对资质、保证金、关键节点等硬性条款，必要时组织复核。",
+                        "priority": "medium",
+                        "source_excerpt": snippet,
+                        "source_start": 0,
+                        "source_end": min(len(snippet), total_len),
+                    }
+                )
+            tabs.append({"id": tab_id, "title": title, "items": items})
+        return {"summary": "自动摘要失败，以下为启发式抽取结果。", "tabs": tabs, "raw_response": "heuristic"}

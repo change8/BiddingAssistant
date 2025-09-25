@@ -43,6 +43,19 @@
       </section>
     </main>
 
+    <div id="snippetModal" class="modal hidden">
+      <div class="modal-dialog">
+        <header class="modal-header">
+          <h3 id="modalTitle">原文片段</h3>
+          <button id="modalClose" type="button" aria-label="关闭">×</button>
+        </header>
+        <div class="modal-body">
+          <div class="modal-meta" id="modalMeta"></div>
+          <pre id="modalContext"></pre>
+        </div>
+      </div>
+    </div>
+
     <script src="/web/static/main.js" defer></script>
   </body>
 </html>

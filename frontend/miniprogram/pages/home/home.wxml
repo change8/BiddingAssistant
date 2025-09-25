@@ -14,75 +14,59 @@
   <text wx:if="{{jobId}}">任务ID：{{jobId}}</text>
 </view>
 
-<view class="card" wx:if="{{result && result.summary}}">
+<view class="card" wx:if="{{result.summary}}">
   <view class="title">整体概述</view>
-  <view style="color:#1f2937;line-height:1.5;">{{result.summary}}</view>
+  <view class="summary-text">{{result.summary}}</view>
 </view>
 
-<view class="card" wx:if="{{result && result.critical_requirements && result.critical_requirements.length}}">
-  <view class="title">关键/强制要求</view>
-  <view wx:for="{{result.critical_requirements}}" wx:key="index" style="margin-top:12rpx;">
-    <view style="font-weight:600;margin-bottom:8rpx;">{{item.category}}</view>
-    <view wx:for="{{item.items}}" wx:key="subIndex" style="border:1rpx solid #e2e8f0;border-radius:12rpx;padding:12rpx;margin-bottom:12rpx;">
-      <view style="display:flex;justify-content:space-between;align-items:center;">
-        <text style="font-weight:600;">{{item2.title}}</text>
-        <text style="padding:4rpx 12rpx;border-radius:999rpx;background:#fee2e2;color:#b91c1c;" wx:if="{{item2.severity==='critical'}}">高风险</text>
-        <text style="padding:4rpx 12rpx;border-radius:999rpx;background:#fef3c7;color:#c2410c;" wx:if="{{item2.severity==='high'}}">较高风险</text>
-        <text style="padding:4rpx 12rpx;border-radius:999rpx;background:#dbeafe;color:#2563eb;" wx:if="{{item2.severity==='medium'}}">中风险</text>
-        <text style="padding:4rpx 12rpx;border-radius:999rpx;background:#dcfce7;color:#16a34a;" wx:if="{{item2.severity==='low'}}">低风险</text>
-      </view>
-      <view wx:if="{{item2.description}}" style="margin:8rpx 0;">{{item2.description}}</view>
-      <view wx:if="{{item2.impact}}" style="color:#475569;">影响：{{item2.impact}}</view>
-      <view wx:if="{{item2.action}}" style="color:#475569;">行动建议：{{item2.action}}</view>
-      <view wx:if="{{item2.evidence}}" style="margin-top:8rpx;color:#64748b;font-size:26rpx;white-space:pre-wrap;">原文：{{item2.evidence}}</view>
+<view class="card" wx:if="{{result.tabs && result.tabs.length}}">
+  <view class="tab-nav">
+    <view wx:for="{{result.tabs}}" wx:key="id" class="tab-btn {{item.id === activeTabId ? 'active' : ''}}" data-id="{{item.id}}" bindtap="onSwitchTab">
+      {{item.title}}（{{item.items.length}}）
     </view>
   </view>
-</view>
-
-<view class="card" wx:if="{{result && result.cost_factors && result.cost_factors.length}}">
-  <view class="title">成本/商务影响</view>
-  <view wx:for="{{result.cost_factors}}" wx:key="index" style="border:1rpx solid #e2e8f0;border-radius:12rpx;padding:12rpx;margin-bottom:10rpx;">
-    <view style="font-weight:600;">{{item.item}}</view>
-    <view wx:if="{{item.description}}" style="margin:6rpx 0;">{{item.description}}</view>
-    <view wx:if="{{item.estimated_impact}}" style="color:#475569;">影响：{{item.estimated_impact}}</view>
-    <view wx:if="{{item.evidence}}" style="margin-top:6rpx;color:#94a3b8;font-size:24rpx;white-space:pre-wrap;">原文：{{item.evidence}}</view>
+  <view class="tab-body">
+    <block wx:if="{{currentItems.length}}">
+      <block wx:for="{{currentItems}}" wx:key="_index" wx:for-index="idx" wx:for-item="item">
+        <view class="tab-item">
+          <view class="item-header">
+            <text class="item-title">{{item.title}}</text>
+            <text class="priority {{item.priority}}">{{item.priorityLabel}}</text>
+          </view>
+          <view class="item-info" wx:if="{{item.why_important}}">
+            <text class="label">为何重要：</text>{{item.why_important}}
+          </view>
+          <view class="item-info" wx:if="{{item.guidance}}">
+            <text class="label">行动建议：</text>{{item.guidance}}
+          </view>
+          <view class="item-info" wx:if="{{item.details && activeTabId !== 'bid_timeline'}}">
+            <text class="label">补充说明：</text>{{item.details}}
+          </view>
+          <view class="item-info" wx:if="{{activeTabId === 'bid_timeline' && item.milestone}}">
+            <text class="label">关键节点：</text>{{item.milestone}}
+          </view>
+          <view class="item-info" wx:if="{{activeTabId === 'bid_timeline' && item.date}}">
+            <text class="label">时间：</text>{{item.date}}
+          </view>
+          <view class="excerpt" wx:if="{{item.source_excerpt}}">{{item.source_excerpt}}</view>
+          <view class="actions">
+            <button wx:if="{{hasSource && item.source_start !== null && item.source_start !== undefined}}" class="source-btn" data-tab="{{activeTabId}}" data-index="{{idx}}" bindtap="onViewSource">查看原文</button>
+            <view class="source-disabled" wx:else>{{hasSource ? '缺少原文索引' : '原文暂不可用'}}</view>
+          </view>
+        </view>
+      </block>
+    </block>
+    <view class="empty" wx:else>该分类暂无模型输出，建议人工确认。</view>
   </view>
 </view>
 
-<view class="card" wx:if="{{result && result.timeline && result.timeline.length}}">
-  <view class="title">时间计划</view>
-  <view wx:for="{{result.timeline}}" wx:key="index" style="border-left:3rpx solid #3b82f6;padding-left:12rpx;margin-bottom:10rpx;">
-    <view style="font-weight:600;">{{item.event || item.name}}</view>
-    <view wx:if="{{item.deadline}}">截止：{{item.deadline}}</view>
-    <view wx:if="{{item.importance}}" style="color:#475569;">{{item.importance}}</view>
-  </view>
-</view>
-
-<view class="card" wx:if="{{result && result.risks && result.risks.length}}">
-  <view class="title">风险与应对</view>
-  <view wx:for="{{result.risks}}" wx:key="index" style="border:1rpx solid #e2e8f0;border-radius:12rpx;padding:12rpx;margin-bottom:10rpx;">
-    <view style="font-weight:600;">{{item.type}}</view>
-    <view wx:if="{{item.description}}" style="margin:6rpx 0;">{{item.description}}</view>
-    <view style="color:#475569;">可能性：{{item.likelihood || '未知'}} · 影响：{{item.impact || '未知'}}</view>
-    <view wx:if="{{item.mitigation}}" style="color:#475569;margin-top:6rpx;">应对措施：{{item.mitigation}}</view>
-  </view>
-</view>
-
-<view class="card" wx:if="{{result && result.unusual_findings && result.unusual_findings.length}}">
-  <view class="title">特殊发现</view>
-  <view wx:for="{{result.unusual_findings}}" wx:key="index" style="border:1rpx solid #e2e8f0;border-radius:12rpx;padding:12rpx;margin-bottom:10rpx;">
-    <view style="font-weight:600;">{{item.title}}</view>
-    <view wx:if="{{item.description}}" style="margin:6rpx 0;">{{item.description}}</view>
-    <view wx:if="{{item.concern}}" style="color:#475569;">关注点：{{item.concern}}</view>
-    <view wx:if="{{item.suggestion}}" style="color:#475569;">建议：{{item.suggestion}}</view>
-  </view>
-</view>
-
-<view class="card" wx:if="{{result && result.clarification_needed && result.clarification_needed.length}}">
-  <view class="title">待澄清问题</view>
-  <view wx:for="{{result.clarification_needed}}" wx:key="index" style="border:1rpx solid #e2e8f0;border-radius:12rpx;padding:12rpx;margin-bottom:10rpx;">
-    <view style="font-weight:600;">{{item.issue}}</view>
-    <view wx:if="{{item.context}}" style="margin:6rpx 0;">{{item.context}}</view>
-    <view wx:if="{{item.suggested_question}}" style="color:#475569;">建议提问：{{item.suggested_question}}</view>
+<view class="snippet-mask" wx:if="{{snippetVisible}}">
+  <view class="snippet-dialog">
+    <view class="snippet-header">
+      <text class="snippet-title">{{snippetTitle}}</text>
+      <text class="snippet-close" bindtap="onCloseSnippet">×</text>
+    </view>
+    <view class="snippet-meta">{{snippetMeta}}</view>
+    <rich-text class="snippet-content" nodes="{{snippetContent}}"></rich-text>
   </view>
 </view>

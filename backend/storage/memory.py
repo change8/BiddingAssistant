@@ -24,6 +24,7 @@ class AnalysisJobRecord:
     error: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
     result: Optional[Dict[str, Any]] = None
+    source_text: Optional[str] = None
 
 
 class InMemoryJobStore:
@@ -68,4 +69,3 @@ class InMemoryJobStore:
     def clear(self) -> None:
         with self._lock:
             self._jobs.clear()
-
